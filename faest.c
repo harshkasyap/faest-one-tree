@@ -10,6 +10,7 @@
 #include "small_vole.h"
 #include "vole_commit.h"
 #include "util.h"
+#include "stdio.h"
 
 void faest_free_public_key(public_key* pk)
 {
@@ -366,6 +367,7 @@ static bool faest_sign_attempt(
 	memcpy(hash_prefix + sizeof(chal2), qs_proof, QUICKSILVER_PROOF_BYTES);
 	memcpy(hash_prefix + sizeof(chal2) + QUICKSILVER_PROOF_BYTES, qs_check, QUICKSILVER_CHECK_BYTES);
 	bool open_success = force_vector_open(forest, hashed_leaves, delta, veccom_open_start, hash_prefix, sizeof(chal2) + QUICKSILVER_PROOF_BYTES + QUICKSILVER_CHECK_BYTES, &counter);
+	//printf("force_vector_open %zu", open_success);
 #endif
 
 	free(forest);
@@ -450,6 +452,7 @@ bool faest_verify(const uint8_t* signature, const uint8_t* msg, size_t msg_len,
 
 	memcpy(&iv, iv_ptr, sizeof(iv));
 	bool reconstruct_success =  vole_reconstruct(iv, q, delta_bytes, signature, veccom_open_start, vole_commit_check);
+	//printf("here5 %zu", reconstruct_success);
 	if (reconstruct_success == 0){
 		free(q);
 		return 0;
@@ -514,5 +517,33 @@ bool faest_verify(const uint8_t* signature, const uint8_t* msg, size_t msg_len,
 	hash_update_byte(&hasher, 2);
 	hash_final(&hasher, &delta_check, sizeof(delta_check));
 
+	/*
+	printf("\ndelta_bytes, q, macs, and chal1 through chal2 %zu %zu  %zu  %zu  %zu",  delta_bytes, q, macs, chal1, chal2);
+
+	printf("\nchal1");
+	for (size_t i = 0; i < 16; ++i) {
+        printf("%02x ", chal1[i]);
+    }
+
+	printf("\nchal2");
+	for (size_t i = 0; i < 16; ++i) {
+        printf("%02x ", chal2[i]);
+    }
+
+	printf("\ndeltao");
+	const uint8_t* bytes_delta = (const uint8_t*) delta;
+	for (size_t i = 0; i < 16; ++i) {
+        printf("%02x ", bytes_delta[i]);
+    }
+	
+	printf("\ndeltac");
+	uint8_t* bytes_delta_check = (uint8_t*)malloc(128);
+	memcpy(bytes_delta_check, &delta_check, sizeof(block128));
+	for (size_t i = 0; i < 16; ++i) {
+        printf("%02x ", bytes_delta_check[i]);
+    }
+
+	printf("here5 %zu", memcmp(delta, &delta_check, sizeof(delta_check)));
+	*/
 	return memcmp(delta, &delta_check, sizeof(delta_check)) == 0;
 }

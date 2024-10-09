@@ -5,6 +5,7 @@
 #include "small_vole.h"
 #include "vector_com.h"
 #include "hash.h"
+#include "stdio.h"
 
 static void hash_hashed_leaves_all_same_size(
 	hash_state* hasher, block_2secpar* hashed_leaves, size_t num_trees, size_t num_leaves)
@@ -111,9 +112,11 @@ bool vole_reconstruct(
 	bool vector_verify_status = vector_verify(iv, opening, delta_bytes, leaves, hashed_leaves);
 #else
 	bool vector_verify_status = batch_vector_verify(iv, opening, delta_bytes, leaves, hashed_leaves);
+	//printf("here2 %zu", vector_verify_status);
 #endif
 	if (vector_verify_status == 0) {
 		success = 0;
+		//printf("here3");
 		goto end;
 	}
 
@@ -152,5 +155,6 @@ bool vole_reconstruct(
 end:
 	free(hashed_leaves);
 	free(leaves);
+	//printf("here4 %zu", success);
 	return success;
 }
