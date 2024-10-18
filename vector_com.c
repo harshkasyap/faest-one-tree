@@ -726,13 +726,73 @@ void batch_vector_commit(
 	//printf("\nbefore expanding leaves %zu %zu", next_to_expand_from, next_to_expand_to);
 
 	// expand leaves
-	block_secpar *prg_output = aligned_alloc(alignof(block_secpar), 3*BATCH_VECTOR_COMMIT_LEAVES * sizeof(block_secpar));
+	//block_secpar *prg_output = aligned_alloc(alignof(block_secpar), 3*BATCH_VECTOR_COMMIT_LEAVES * sizeof(block_secpar));
+	
+	/*
 	for (size_t i = 0; i < BATCH_VECTOR_COMMIT_LEAVES; i+= LEAF_CHUNK_SIZE)
 	{
 		expand_chunk_leaf_n_leaf_chunk_size(iv, &fixed_key_leaf, tree + BATCH_VECTOR_COMMIT_LEAVES - 1 + i, prg_output + 3*i);
+		printf(" %zu", BATCH_VECTOR_COMMIT_LEAVES - 1 + i);
 	}
 	// expand last chunk (overlaps with what we already did)
 	expand_chunk_leaf_n_leaf_chunk_size(iv, &fixed_key_leaf, tree + BATCH_VECTOR_COMMIT_NODES - 1 - LEAF_CHUNK_SIZE, prg_output + 3*(BATCH_VECTOR_COMMIT_LEAVES-1-LEAF_CHUNK_SIZE));
+	printf("here2 %zu", BATCH_VECTOR_COMMIT_NODES - 1 - LEAF_CHUNK_SIZE);
+	*/
+
+	block_secpar *prg_output = aligned_alloc(alignof(block_secpar), 2*BATCH_VECTOR_COMMIT_LEAVES * sizeof(block_secpar));
+	uint8_t* cin0 = (uint8_t*)malloc(16);
+	uint8_t* cin1 = (uint8_t*)malloc(16);
+	uint8_t* cin2 = (uint8_t*)malloc(16);
+	uint8_t* cin3 = (uint8_t*)malloc(16);
+
+	uint8_t* cseed = (uint8_t*)malloc(16);
+	memset(cseed, 1, 16);	
+	//memcpy(cseed, &seed, sizeof(block128));
+	uint8_t* c2seed = (uint8_t*)malloc(32);
+	memset(c2seed, 1, 32);	
+
+	uint8_t* cout0 = (uint8_t*)malloc(32);
+	uint8_t* cout1 = (uint8_t*)malloc(32);
+	uint8_t* cout2 = (uint8_t*)malloc(32);
+	uint8_t* cout3 = (uint8_t*)malloc(32);
+
+	for (size_t i = 0; i < BATCH_VECTOR_COMMIT_LEAVES; i+= LEAF_CHUNK_SIZE)
+	{
+		memcpy(cin0, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 0], sizeof(block_secpar));
+		memcpy(cin1, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 1], sizeof(block_secpar));
+		memcpy(cin2, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 2], sizeof(block_secpar));
+		memcpy(cin3, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 3], sizeof(block_secpar));
+					
+		ccr2_x4_with_ctx(&ctx, cin0, cin1, cin2, cin3,
+            cseed, cseed, cseed, cseed,
+            16,
+            cout0, cout1, cout2, cout3,
+            32);
+
+		memcpy(&prg_output[2 * (i + 0)], cout0, sizeof(block_2secpar));
+		memcpy(&prg_output[2 * (i + 1)], cout1, sizeof(block_2secpar));
+		memcpy(&prg_output[2 * (i + 2)], cout2, sizeof(block_2secpar));
+		memcpy(&prg_output[2 * (i + 3)], cout3, sizeof(block_2secpar));
+		//printf(" %zu", BATCH_VECTOR_COMMIT_LEAVES - 1 + i); 
+	}
+
+	
+	memcpy(cin0, &tree[BATCH_VECTOR_COMMIT_NODES - 1 - LEAF_CHUNK_SIZE + 0], sizeof(block_secpar));
+	memcpy(cin1, &tree[BATCH_VECTOR_COMMIT_NODES - 1 - LEAF_CHUNK_SIZE + 1], sizeof(block_secpar));
+	memcpy(cin2, &tree[BATCH_VECTOR_COMMIT_NODES - 1 - LEAF_CHUNK_SIZE + 2], sizeof(block_secpar));
+	memcpy(cin3, &tree[BATCH_VECTOR_COMMIT_NODES - 1 - LEAF_CHUNK_SIZE + 3], sizeof(block_secpar));
+				
+	ccr2_x4_with_ctx(&ctx, cin0, cin1, cin2, cin3,
+		cseed, cseed, cseed, cseed,
+		16,
+		cout0, cout1, cout2, cout3,
+		32);
+
+	memcpy(&prg_output[2*(BATCH_VECTOR_COMMIT_LEAVES - 1 - LEAF_CHUNK_SIZE + 0)], cout0, sizeof(block_2secpar));
+	memcpy(&prg_output[2*(BATCH_VECTOR_COMMIT_LEAVES - 1 - LEAF_CHUNK_SIZE + 1)], cout1, sizeof(block_2secpar));
+	memcpy(&prg_output[2*(BATCH_VECTOR_COMMIT_LEAVES - 1 - LEAF_CHUNK_SIZE + 2)], cout2, sizeof(block_2secpar));
+	memcpy(&prg_output[2*(BATCH_VECTOR_COMMIT_LEAVES - 1 - LEAF_CHUNK_SIZE + 3)], cout3, sizeof(block_2secpar));
+	
 
 	//printf("\nafter expanding leaves %zu %zu %zu %zu", next_to_expand_from, next_to_expand_to, BATCH_VECTOR_COMMIT_LEAVES, BATCH_VECTOR_COMMIT_NODES);
 
@@ -741,8 +801,11 @@ void batch_vector_commit(
 	{
 		for (size_t leaf_index = 0; leaf_index < BATCH_VEC_LEN(vec_index); leaf_index++)
 		{
-			leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)] = prg_output[3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1)];
-			memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), prg_output + 3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) + 1, sizeof(block_2secpar));
+			//printf("\n leaf index %zu", BATCH_VEC_LEN(vec_index));
+			//leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)] = prg_output[2*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1)];
+			memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], cseed, sizeof(block_secpar));
+			//memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), prg_output + 2*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1), sizeof(block_2secpar));
+			memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), c2seed, sizeof(block_2secpar));
 		}
 	}
 	free(prg_output);
@@ -1013,18 +1076,36 @@ bool batch_vector_verify(
 		}
 	}
 
+	//printf("\n BITS_PER_WITNESS %zu", BITS_PER_WITNESS);
+
+	uint8_t* cin0 = (uint8_t*)malloc(16);
+	uint8_t* cseed = (uint8_t*)malloc(16);
+	memset(cseed, 1, 16);	
+	uint8_t* c2seed = (uint8_t*)malloc(32);
+	memset(c2seed, 1, 32);	
+	uint8_t* cout0 = (uint8_t*)malloc(32);
+
 	for (size_t vec_index = 0; vec_index < BITS_PER_WITNESS; vec_index++)
 	{
 		for (size_t leaf_index = 0; leaf_index < BATCH_VEC_LEN(vec_index); leaf_index++)
 		{
+			//printf("\n verify leaf index %zu", BATCH_VEC_LEN(vec_index));
 			size_t pos = BATCH_VEC_POS_IN_TREE(vec_index, leaf_index);
+			//printf("\n pos %zu", pos);
 			if(dont_reveal[pos] == 0)
 				//write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
-				write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
+				//write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
+				//printf("\n %zu, %zu, %zu", pos, BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
+				//memcpy(cin0, &leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index])], sizeof(block_secpar));
+				memcpy(cin0, &tree[pos], sizeof(block_secpar));
+				ccr2_with_ctx(&ctx, cin0, cseed, 16, cout0, 32);
+				//leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)] = prg_output[2*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1)];
+				memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], cseed, sizeof(block_secpar));
+				//memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), cout0, sizeof(block_2secpar));
+				memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), c2seed, sizeof(block_2secpar));
 		}
 	}
 end:
 	free(tree);
-	//printf("here");
 	return success;
 }
