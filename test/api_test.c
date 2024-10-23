@@ -3,6 +3,7 @@
  */
 
 #include "api.h"
+#include <time.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -33,14 +34,20 @@ int main(void) {
   }
 
   unsigned long long smlen = sizeof(sm);
+  clock_t start_time = clock();
   ret                      = crypto_sign(sm, &smlen, message, sizeof(message), sk);
+  clock_t end_time = clock();
+  double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+  printf("Time taken to sign: %f seconds\n", time_taken);
   if (ret != 0) {
     printf("Failed to sign\n");
     return -1;
   }
 
   unsigned long long mlen = sizeof(omessage);
+  clock_t start_time1 = clock();
   ret                     = crypto_sign_open(omessage, &mlen, sm, smlen, pk);
+  printf("Time taken to verify: %f seconds\n",(double)(clock() - start_time1) / CLOCKS_PER_SEC);
   if (ret != 0) {
     printf("Failed to verify (ret = %d)\n", ret);
     return -1;
