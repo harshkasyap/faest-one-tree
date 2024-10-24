@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "prgs.h"
 #include "small_vole.h"
@@ -584,18 +585,25 @@ void batch_vector_commit(
 	
 	// root node
 	size_t chunck_size = 1;
+	
+	clock_t start_time = clock();
 	expand_chunk_switch(chunck_size, iv, &fixed_key_tree, &tree[ next_to_expand_from ], &tree[next_to_expand_to]);
+	clock_t end_time = clock();
+  	double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+  	//printf("Time taken for a PRG based expansion for a block: %f seconds\n", time_taken);
+
 	next_to_expand_from += chunck_size;
 	next_to_expand_to += 2*chunck_size;
 	chunck_size *= 2;
 
 	// setup a single context for all
+	// as of now need to manually change lambda and bytes (128,16), (192,24) or (256,32).
 	uint32_t lambda = 256;
 	uint32_t bytes = 32;
 	uint8_t* local_iv = (uint8_t*)malloc(128);
 	memcpy(local_iv, &iv, sizeof(block128));
 
-  	union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
+  	//union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
 
 	uint8_t* in = (uint8_t*)malloc(bytes);
 	uint8_t* out = (uint8_t*)malloc(bytes);
@@ -607,7 +615,11 @@ void batch_vector_commit(
 		
 		memcpy(in, &tree[i], sizeof(block_secpar));
 
-		ccr_with_ctx(&ctx, in, out, bytes);
+		//ccr_with_ctx(&ctx, in, out, bytes);
+		clock_t start_time1 = clock();
+		ccr_without_ctx(lambda, local_iv, in, out, bytes);
+		//printf("Time taken to for a CCR based expansion for a block: %f seconds\n",(double)(clock() - start_time1) / CLOCKS_PER_SEC);
+
 		memcpy(&tree[2 * i + 1], out, sizeof(block_secpar));
 
 		// xor the left child with the parent
@@ -653,7 +665,14 @@ void batch_vector_commit(
 		memcpy(cin2, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 2], sizeof(block_secpar));
 		memcpy(cin3, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 3], sizeof(block_secpar));
 					
+		/*
 		ccr2_x4_with_ctx(&ctx, cin0, cin1, cin2, cin3,
+            cseed, cseed, cseed, cseed,
+            bytes,
+            cout_array[(i + 0)], cout_array[(i + 1)], cout_array[(i + 2)], cout_array[(i + 3)],
+            bytes * 2);*/
+
+		ccr2_x4_without_ctx(lambda, local_iv, cin0, cin1, cin2, cin3,
             cseed, cseed, cseed, cseed,
             bytes,
             cout_array[(i + 0)], cout_array[(i + 1)], cout_array[(i + 2)], cout_array[(i + 3)],
@@ -671,7 +690,7 @@ void batch_vector_commit(
 			memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], cseed, sizeof(block_secpar));
 		}
 	}
-	CCR_CTX_free(&ctx, lambda);
+	//CCR_CTX_free(&ctx, lambda);
 }
 
 bool force_vector_open(const block_secpar* restrict forest, const block_2secpar* restrict hashed_leaves, uint8_t* restrict delta_out, unsigned char* restrict opening, const unsigned char *message, size_t m_len, uint32_t *out_counter){
@@ -746,7 +765,9 @@ bool force_vector_open(const block_secpar* restrict forest, const block_2secpar*
 			vector_open(forest, hashed_leaves, delta_bytes, opening);
 			bool b = true;
 #else
+			clock_t start_time = clock();
 			bool b = batch_vector_open(forest, hashed_leaves, delta_bytes, opening);
+			//printf("Time taken to open: %f seconds\n",(double)(clock() - start_time) / CLOCKS_PER_SEC);
 #endif
 
 			if (b) {
@@ -908,13 +929,13 @@ bool batch_vector_verify(
 	node = 1;
 
 	// setup a single context for all
-	printf("here");
+	//printf("here");
 	uint32_t lambda = 256;
 	uint32_t bytes = 32;
 	uint8_t* local_iv = (uint8_t*)malloc(128);
 	memcpy(local_iv, &iv, sizeof(block128));
 
-  	union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
+  	//union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
 
 	uint8_t* in = (uint8_t*)malloc(bytes);
 	uint8_t* out = (uint8_t*)malloc(bytes);
@@ -929,7 +950,8 @@ bool batch_vector_verify(
 			//expand_chunk(0, 1, 2, iv, &fixed_key_tree, &fixed_key_leaf, &tree[ node ], &tree[2*node + 1]);
 			memcpy(in, &tree[node], sizeof(block_secpar));
 
-			ccr_with_ctx(&ctx, in, out, bytes);
+			//ccr_with_ctx(&ctx, in, out, bytes);
+			ccr_without_ctx(lambda, local_iv, in, out, bytes);
 			memcpy(&tree[2 * node + 1], out, sizeof(block_secpar));
 			// xor the left child with the parent
 			xor_u8_array(in, out, xor, bytes);
@@ -952,7 +974,8 @@ bool batch_vector_verify(
 			if(dont_reveal[pos] == 0) {
 				// write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
 				memcpy(cin, &tree[pos], sizeof(block_secpar));
-				ccr2_with_ctx(&ctx, cin, ccrseed, bytes, cout, bytes * 2);
+				//ccr2_with_ctx(&ctx, cin, ccrseed, bytes, cout, bytes * 2);
+				ccr2_without_ctx(lambda, local_iv, cin, ccrseed, bytes, cout, bytes * 2);
 
 				memcpy(&hashed_leaves[BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index)], cout, sizeof(block_2secpar));
 				memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index])], cseed, sizeof(block_secpar));
@@ -961,6 +984,6 @@ bool batch_vector_verify(
 	}
 end:
 	free(tree);
-	CCR_CTX_free(&ctx, lambda);
+	//CCR_CTX_free(&ctx, lambda);
 	return success;
 }
