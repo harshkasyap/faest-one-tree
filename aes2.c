@@ -677,6 +677,58 @@ union CCR_CTX CCR_CTX_setup(unsigned int seclvl, const uint8_t* iv) {
   }
 }
 
+// but ctx setup depends on in which is runtime so this looks not to help
+union CCR_CTX CCR_CTX_setup_new(unsigned int seclvl, const uint8_t* iv, const uint8_t* in) {
+  const EVP_CIPHER* cipher;
+  union CCR_CTX out;
+  //block256 iv256 = block256_set_low128(_mm_loadu_si128((block128 const*)iv));
+  //block192 iv192 = block192_set_low128(iv);
+  switch (seclvl) {
+  case 256:{
+    //uint8_t left_16[16];
+    uint8_t right_16[16];
+    
+    //memcpy(left_16, in, 16);
+    memcpy(right_16, in + 16, 16);
+    uint8_t* ivr = (uint8_t*)malloc(seclvl/8);
+    memcpy(ivr, right_16, 16);
+    memcpy(ivr + 16, iv, 16);
+
+    block256 iv256r = _mm256_loadu_si256((__m256i const*)ivr);
+    free(ivr);
+
+    rijndael256_keygen2(&out.r256_round_keys, iv256r);
+
+    return out;
+  }
+  case 192:{
+    //uint8_t _left_16[16];  //rl - 128
+    uint8_t _right_8[8];   //rr - 64
+
+    //memcpy(_left_16, in, 16);
+    memcpy(_right_8, in + 16, 8);
+
+    uint8_t* _ivr = (uint8_t*)malloc(seclvl/8);
+    memcpy(_ivr, _right_8, 8);
+    memcpy(_ivr + 8, iv, 16);
+
+    block192t _iv192r;
+    memcpy(&_iv192r, _ivr, sizeof(block192t));
+    free(_ivr);
+
+    rijndael192_keygen2(&out.r192_round_keys, _iv192r);
+    return out;
+  }
+  default:
+    cipher = EVP_aes_128_ecb();
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    static const uint8_t dummy[16] = {0};
+    EVP_EncryptInit_ex(ctx, cipher, NULL, iv, dummy);
+    out.evp_ctx = ctx;
+    return out;
+  }
+}
+
 void CCR_CTX_free(union CCR_CTX *ctx, unsigned int seclvl) {
   switch (seclvl) {
   case 256:
@@ -711,6 +763,184 @@ void ccr_with_ctx(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t ou
   }
 }
 
+void ccr_with_ctx_new(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t outlen) {
+  switch (outlen*8) {
+  
+  case 256: {
+    uint8_t left_16[16];
+    //uint8_t right_16[16];
+    
+    memcpy(left_16, in, 16);
+    //memcpy(right_16, in + 16, 16);
+    
+    static uint8_t tmpl[16];
+    ortho(left_16, tmpl, 16); // ortho (rl)
+
+    permute_with_ctx(ctx, tmpl, out, 32);
+  
+    for (size_t i = 0; i < 16; i++) {
+      out[i] ^= tmpl[i];
+    }
+
+    permute_with_ctx(ctx, tmpl, out, 32);
+
+    for (size_t i = 0; i < 16; i++) {
+      out[i+16] ^= tmpl[i];
+    }
+
+    break;
+  }
+  case 192: {
+  
+    uint8_t _left_16[16];  //rl - 128
+    //uint8_t _right_8[8];   //rr - 64
+
+    memcpy(_left_16, in, 16);
+    //memcpy(_right_8, in + 16, 8);
+
+    static uint8_t _tmpl[16];
+    ortho(_left_16, _tmpl, 16); // ortho (rl)
+
+    permute_with_ctx(ctx, _tmpl, out, 24); //AES(ortho(rl))
+
+    // XOR with Ortho
+    for (size_t i = 0; i < 16; i++) {
+      out[i] ^= _tmpl[i];
+    }
+
+    // Another AES
+    permute_with_ctx(ctx, _tmpl, out, 24);
+
+    // Another XOR
+    for (size_t i = 0; i < 8; i++) {
+      out[i+16] ^= _tmpl[i];
+    }
+
+    break;
+  }
+  default: {
+    static uint8_t tmp[32];
+    ortho(in, tmp, outlen);  
+    
+    permute_with_ctx(ctx, tmp, out, outlen);
+
+    for (size_t i = 0; i < outlen; i++) {
+      out[i] ^= tmp[i];
+    }
+
+    break;
+  }  
+  }
+}
+
+// AES(c_o ^ ortho(x)) ^ ortho(x)
+void ccr_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* in, uint8_t* out, size_t outlen) {
+	
+  union CCR_CTX ctx; // = CCR_CTX_setup(seclvl, iv);
+  
+  switch (outlen*8) {
+  
+  case 256: {
+    uint8_t left_16[16];
+    uint8_t right_16[16];
+    
+    memcpy(left_16, in, 16);
+    memcpy(right_16, in + 16, 16);
+
+    /*
+    uint8_t* ivl = (uint8_t*)malloc(outlen);
+    memcpy(ivl, left_16, 16);
+    memcpy(ivl + 16, iv, 16);
+
+    block256 iv256l = _mm256_loadu_si256((__m256i const*)ivl);
+    free(ivl);
+
+    rijndael256_keygen(&ctx.r256_round_keys, iv256l);
+    */
+    
+    uint8_t* ivr = (uint8_t*)malloc(outlen);
+    memcpy(ivr, right_16, 16);
+    memcpy(ivr + 16, iv, 16);
+
+    block256 iv256r = _mm256_loadu_si256((__m256i const*)ivr);
+    free(ivr);
+    
+    rijndael256_keygen2(&ctx.r256_round_keys, iv256r);
+    
+    static uint8_t tmpl[16];
+    ortho(left_16, tmpl, 16); // ortho (rl)
+
+    permute_with_ctx(&ctx, tmpl, out, 32);
+  
+    for (size_t i = 0; i < 16; i++) {
+      out[i] ^= tmpl[i];
+    }
+
+    permute_with_ctx(&ctx, tmpl, out, 32);
+
+    for (size_t i = 0; i < 16; i++) {
+      out[i+16] ^= tmpl[i];
+    }
+
+    break;
+  }
+  case 192: {
+  
+    uint8_t _left_16[16];  //rl - 128
+    uint8_t _right_8[8];   //rr - 64
+
+    memcpy(_left_16, in, 16);
+    memcpy(_right_8, in + 16, 8);
+
+    uint8_t* _ivr = (uint8_t*)malloc(outlen);
+    memcpy(_ivr, _right_8, 8);
+    memcpy(_ivr + 8, iv, 16);
+
+    block192t _iv192r;
+    memcpy(&_iv192r, _ivr, sizeof(block192t));
+    free(_ivr);
+
+    rijndael192_keygen2(&ctx.r192_round_keys, _iv192r);
+
+    static uint8_t _tmpl[16];
+    ortho(_left_16, _tmpl, 16); // ortho (rl)
+
+    permute_with_ctx(&ctx, _tmpl, out, 24); //AES(ortho(rl))
+
+    // XOR with Ortho
+    for (size_t i = 0; i < 16; i++) {
+      out[i] ^= _tmpl[i];
+    }
+
+    // Another AES
+    permute_with_ctx(&ctx, _tmpl, out, 24);
+
+    // Another XOR
+    for (size_t i = 0; i < 8; i++) {
+      out[i+16] ^= _tmpl[i];
+    }
+
+    break;
+  }
+  default: {
+    ctx = CCR_CTX_setup(seclvl, iv);
+
+    static uint8_t tmp[32];
+    ortho(in, tmp, outlen);  
+    
+    permute_with_ctx(&ctx, tmp, out, outlen);
+
+    for (size_t i = 0; i < outlen; i++) {
+      out[i] ^= tmp[i];
+    }
+
+    break;
+  }  
+  }
+  
+  CCR_CTX_free(&ctx, seclvl);
+}
+
 static inline void ccr_tweaked(const uint8_t* key, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
   static uint8_t tmp[32];
   ortho_tweaked(key, tmp, outlen);
@@ -738,12 +968,152 @@ static inline void ccr_tweaked_with_ctx(union CCR_CTX* ctx, const uint8_t* in, u
   }
 }
 
+static inline void ccr_tweaked_with_ctx_new(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t outlen) {
+  switch (outlen*8) {
+  
+  case 256: {
+    uint8_t left_16[16];
+    //uint8_t right_16[16];
+    
+    memcpy(left_16, in, 16);
+    //memcpy(right_16, in + 16, 16);
+    
+    static uint8_t tmpl[16];
+    ortho_tweaked(left_16, tmpl, 16); // ortho (rl)
+
+    permute_with_ctx(ctx, tmpl, out, 32);
+  
+    for (size_t i = 0; i < 16; i++) {
+      out[i] ^= tmpl[i];
+    }
+
+    permute_with_ctx(ctx, tmpl, out, 32);
+
+    for (size_t i = 0; i < 16; i++) {
+      out[i+16] ^= tmpl[i];
+    }
+
+    break;
+  }
+  case 192: {
+  
+    uint8_t _left_16[16];  //rl - 128
+    //uint8_t _right_8[8];   //rr - 64
+
+    memcpy(_left_16, in, 16);
+    //memcpy(_right_8, in + 16, 8);
+
+    static uint8_t _tmpl[16];
+    ortho_tweaked(_left_16, _tmpl, 16); // ortho (rl)
+
+    permute_with_ctx(ctx, _tmpl, out, 24); //AES(ortho(rl))
+
+    // XOR with Ortho
+    for (size_t i = 0; i < 16; i++) {
+      out[i] ^= _tmpl[i];
+    }
+
+    // Another AES
+    permute_with_ctx(ctx, _tmpl, out, 24);
+
+    // Another XOR
+    for (size_t i = 0; i < 8; i++) {
+      out[i+16] ^= _tmpl[i];
+    }
+
+    break;
+  }
+  default: {
+    static uint8_t tmp[32];
+    ortho_tweaked(in, tmp, outlen);  
+    
+    permute_with_ctx(ctx, tmp, out, outlen);
+
+    for (size_t i = 0; i < outlen; i++) {
+      out[i] ^= tmp[i];
+    }
+
+    break;
+  }  
+  }
+}
+
 static inline void ccr_tweaked_with_ctx2(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t outlen) {
   static uint8_t tmp[32];
   ortho_tweaked2(in, tmp, outlen);
   permute_with_ctx(ctx, tmp, out, outlen);
   for (size_t i = 0; i < outlen; i++) {
     out[i] ^= tmp[i];
+  }
+}
+
+static inline void ccr_tweaked_with_ctx2_new(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t outlen) {
+  switch (outlen*8) {
+  
+  case 256: {
+    uint8_t left_16[16];
+    //uint8_t right_16[16];
+    
+    memcpy(left_16, in, 16);
+    //memcpy(right_16, in + 16, 16);
+    
+    static uint8_t tmpl[16];
+    ortho_tweaked2(left_16, tmpl, 16); // ortho (rl)
+
+    permute_with_ctx(ctx, tmpl, out, 32);
+  
+    for (size_t i = 0; i < 16; i++) {
+      out[i] ^= tmpl[i];
+    }
+
+    permute_with_ctx(ctx, tmpl, out, 32);
+
+    for (size_t i = 0; i < 16; i++) {
+      out[i+16] ^= tmpl[i];
+    }
+
+    break;
+  }
+  case 192: {
+  
+    uint8_t _left_16[16];  //rl - 128
+    //uint8_t _right_8[8];   //rr - 64
+
+    memcpy(_left_16, in, 16);
+    //memcpy(_right_8, in + 16, 8);
+
+    static uint8_t _tmpl[16];
+    ortho_tweaked2(_left_16, _tmpl, 16); // ortho (rl)
+
+    permute_with_ctx(ctx, _tmpl, out, 24); //AES(ortho(rl))
+
+    // XOR with Ortho
+    for (size_t i = 0; i < 16; i++) {
+      out[i] ^= _tmpl[i];
+    }
+
+    // Another AES
+    permute_with_ctx(ctx, _tmpl, out, 24);
+
+    // Another XOR
+    for (size_t i = 0; i < 8; i++) {
+      out[i+16] ^= _tmpl[i];
+    }
+
+    break;
+  }
+  default: {
+    static uint8_t tmp[32];
+    ortho_tweaked(in, tmp, outlen);  
+    
+    permute_with_ctx(ctx, tmp, out, outlen);
+
+    for (size_t i = 0; i < outlen; i++) {
+      out[i] ^= tmp[i];
+    }
+
+    break;
+  }  
   }
 }
 
@@ -759,6 +1129,18 @@ void ccr2_with_ctx(union CCR_CTX* ctx, const uint8_t* src, uint8_t* seed, size_t
   ccr_with_ctx(ctx, src, seed, seed_len);
   ccr_tweaked_with_ctx(ctx, src, commitment, commitment_len/2);
   ccr_tweaked_with_ctx2(ctx, src, commitment+(commitment_len/2), commitment_len/2);
+}
+
+void ccr2_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* src, uint8_t* seed, size_t seed_len,
+          uint8_t* commitment, size_t commitment_len) {
+  
+  union CCR_CTX ctx = CCR_CTX_setup_new(seclvl, iv, src);
+
+  ccr_with_ctx_new(&ctx, src, seed, seed_len);
+  ccr_tweaked_with_ctx(&ctx, src, commitment, commitment_len/2);
+  ccr_tweaked_with_ctx2(&ctx, src, commitment+(commitment_len/2), commitment_len/2);
+
+  CCR_CTX_free(&ctx, seclvl);
 }
 
 void ccr2_x4(const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, const uint8_t* src3,
@@ -779,6 +1161,15 @@ void ccr2_x4_with_ctx(union CCR_CTX* ctx, const uint8_t* src0, const uint8_t* sr
   ccr2_with_ctx(ctx, src1, seed1, seed_len, commitment1, commitment_len);
   ccr2_with_ctx(ctx, src2, seed2, seed_len, commitment2, commitment_len);
   ccr2_with_ctx(ctx, src3, seed3, seed_len, commitment3, commitment_len);
+}
+
+void ccr2_x4_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, const uint8_t* src3,
+             uint8_t* seed0, uint8_t* seed1, uint8_t* seed2, uint8_t* seed3, size_t seed_len,
+             uint8_t* commitment0, uint8_t* commitment1, uint8_t* commitment2, uint8_t* commitment3, size_t commitment_len) {
+  ccr2_without_ctx(seclvl, iv, src0, seed0, seed_len, commitment0, commitment_len);
+  ccr2_without_ctx(seclvl, iv, src1, seed1, seed_len, commitment1, commitment_len);
+  ccr2_without_ctx(seclvl, iv, src2, seed2, seed_len, commitment2, commitment_len);
+  ccr2_without_ctx(seclvl, iv, src3, seed3, seed_len, commitment3, commitment_len);
 }
 
 void prg(const uint8_t* key, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {

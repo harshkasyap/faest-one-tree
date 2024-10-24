@@ -107,10 +107,19 @@ void ccr2_x4(const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, cons
 
 void ccr_with_ctx(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t outlen);
 
+void ccr_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* in, uint8_t* out, size_t outlen);
+
 void ccr2_with_ctx(union CCR_CTX* ctx, const uint8_t* src, uint8_t* seed, size_t seed_len,
           uint8_t* commitment, size_t commitment_len);
 
+void ccr2_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* src, uint8_t* seed, size_t seed_len,
+          uint8_t* commitment, size_t commitment_len);          
+
 void ccr2_x4_with_ctx(union CCR_CTX* ctx, const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, const uint8_t* src3,
+             uint8_t* seed0, uint8_t* seed1, uint8_t* seed2, uint8_t* seed3, size_t seed_len,
+             uint8_t* commitment0, uint8_t* commitment1, uint8_t* commitment2, uint8_t* commitment3, size_t commitment_len);
+
+void ccr2_x4_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, const uint8_t* src3,
              uint8_t* seed0, uint8_t* seed1, uint8_t* seed2, uint8_t* seed3, size_t seed_len,
              uint8_t* commitment0, uint8_t* commitment1, uint8_t* commitment2, uint8_t* commitment3, size_t commitment_len);
 FAEST_END_C_DECL
