@@ -701,13 +701,11 @@ void batch_vector_commit(
 	chunk_size *= 2;
 
 	// Set up CCR context
-	uint32_t lambda = 256;
-	uint32_t bytes = 32;
+	uint32_t lambda = 256, bytes = 32;
 	uint8_t local_iv[128] = {0};
 	memcpy(local_iv, &iv, sizeof(block128));
 
 	union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
-
 	uint8_t in[32], out[32], xor_buf[32];
 
 	// Expand tree nodes
@@ -1003,7 +1001,7 @@ bool batch_vector_verify(
 
 	// setup a single context for all
 	uint32_t lambda = 256, bytes = 32;
-	uint8_t* local_iv = malloc(128);
+	uint8_t local_iv[128] = {0};
 	memcpy(local_iv, &iv, sizeof(block128));
 	union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
 	uint8_t *in = malloc(bytes), *out = malloc(bytes), *xor = malloc(bytes);
@@ -1019,8 +1017,6 @@ bool batch_vector_verify(
 	}
 
 	uint8_t* cin = (uint8_t*)malloc(bytes);
-	uint8_t* ccrseed = (uint8_t*)malloc(bytes);
-	memset(ccrseed, 1, bytes);	
 	uint8_t* cseed = (uint8_t*)malloc(bytes);
 	memset(cseed, 1, bytes);	
 	uint8_t* cout = (uint8_t*)malloc(bytes*2);
@@ -1033,10 +1029,10 @@ bool batch_vector_verify(
 			if(!dont_reveal[pos]) {
 				// write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
 				memcpy(cin, &tree[pos], sizeof(block_secpar));
-				ccr2_with_ctx(&ctx, cin, ccrseed, bytes, cout, bytes * 2);
+				ccr2_with_ctx(&ctx, cin, cseed, bytes, cout, bytes * 2);
 
 				memcpy(&hashed_leaves[BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index)], cout, sizeof(block_2secpar));
-				memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index])], cseed, sizeof(block_secpar));
+				memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index])], &cseed, sizeof(block_secpar));
 			}
 		}
 	}
@@ -1044,13 +1040,5 @@ end:
 	// Free allocated memory
 	free(tree);
 	CCR_CTX_free(&ctx, lambda);
-	free(local_iv);
-	free(in);
-	free(out);
-	free(xor);
-	free(cin);
-	free(cseed);
-	free(cout);
-
 	return success;
 }
