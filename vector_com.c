@@ -725,7 +725,8 @@ void batch_vector_commit(
 	for (size_t i = 1; i < BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES; i++) {
 		memcpy(in, &tree[i], sizeof(block_secpar));
 
-		ccr_without_ctx(lambda, local_iv, in, out, bytes);
+		//ccr_without_ctx(lambda, local_iv, in, out, bytes);
+		ccr_aes_ctx(in, local_iv, out, lambda, bytes);
 		memcpy(&tree[2 * i + 1], out, sizeof(block_secpar));
 
 		// XOR the left child with the parent
@@ -1024,7 +1025,8 @@ bool batch_vector_verify(
 	for (size_t node = 0; node < BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES; node++) {
 		if (!dont_reveal[node]) {
 			memcpy(in, &tree[node], sizeof(block_secpar));
-			ccr_without_ctx(lambda, local_iv, in, out, bytes);
+			//ccr_without_ctx(lambda, local_iv, in, out, bytes);
+			ccr_aes_ctx(in, local_iv, out, lambda, bytes);
 			memcpy(&tree[2 * node + 1], out, sizeof(block_secpar));
 			xor_u8_array(in, out, xor, bytes);
 			memcpy(&tree[2 * node + 2], xor, sizeof(block_secpar));

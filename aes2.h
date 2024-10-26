@@ -107,6 +107,8 @@ void ccr2_x4(const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, cons
 
 void ccr_with_ctx(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t outlen);
 
+void ccr_aes_ctx(const uint8_t* key, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen);
+
 void ccr_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* in, uint8_t* out, size_t outlen);
 
 void ccr2_with_ctx(union CCR_CTX* ctx, const uint8_t* src, uint8_t* seed, size_t seed_len,

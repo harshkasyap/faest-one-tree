@@ -629,7 +629,8 @@ static inline void permute_with_ctx(union CCR_CTX* ctx, const uint8_t* in, uint8
   switch (outlen*8) { // outlen is the seclvl
   case 256:
     tmp256 = _mm256_loadu_si256((block256 const*)in);
-    rijndael256_encrypt_block_avx(&ctx->r256_round_keys, &tmp256);
+    //rijndael256_encrypt_block_avx(&ctx->r256_round_keys, &tmp256);
+
     memcpy(out, (uint8_t*)(&tmp256), outlen);
     break;
   case 192:
@@ -760,6 +761,77 @@ void ccr_with_ctx(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t ou
   permute_with_ctx(ctx, tmp, out, outlen);
   for (size_t i = 0; i < outlen; i++) {
     out[i] ^= tmp[i];
+  }
+}
+
+// AES(ortho(x)) ^ ortho(x)
+void ccr_aes_ctx(const uint8_t* key, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
+  static uint8_t tmp[32];
+  ortho(key, tmp, outlen);
+
+  uint8_t internal_iv[16];
+  memcpy(internal_iv, iv, sizeof(internal_iv));
+
+  aes_round_keys_t round_key;
+
+  switch (seclvl) {
+  case 256:
+    aes256_init_round_keys(&round_key, tmp);
+    for (; outlen >= 16; outlen -= 16, out += 16) {
+      aes_block_t state;
+      load_state(state, internal_iv, AES_BLOCK_WORDS);
+      aes_encrypt(&round_key, state, AES_BLOCK_WORDS, ROUNDS_256);
+      store_state(out, state, AES_BLOCK_WORDS);
+      aes_increment_iv(internal_iv);
+    }
+    if (outlen) {
+      aes_block_t state;
+      load_state(state, internal_iv, AES_BLOCK_WORDS);
+      aes_encrypt(&round_key, state, AES_BLOCK_WORDS, ROUNDS_256);
+      uint8_t tmp[16];
+      store_state(tmp, state, AES_BLOCK_WORDS);
+      memcpy(out, tmp, outlen);
+    }
+    break;
+  case 192:
+    aes192_init_round_keys(&round_key, tmp);
+    for (; outlen >= 16; outlen -= 16, out += 16) {
+      aes_block_t state;
+      load_state(state, internal_iv, AES_BLOCK_WORDS);
+      aes_encrypt(&round_key, state, AES_BLOCK_WORDS, ROUNDS_192);
+      store_state(out, state, AES_BLOCK_WORDS);
+      aes_increment_iv(internal_iv);
+    }
+    if (outlen) {
+      aes_block_t state;
+      load_state(state, internal_iv, AES_BLOCK_WORDS);
+      aes_encrypt(&round_key, state, AES_BLOCK_WORDS, ROUNDS_192);
+      uint8_t tmp[16];
+      store_state(tmp, state, AES_BLOCK_WORDS);
+      memcpy(out, tmp, outlen);
+    }
+    break;
+  default:
+    aes128_init_round_keys(&round_key, tmp);
+    for (; outlen >= 16; outlen -= 16, out += 16) {
+      aes_block_t state;
+      load_state(state, internal_iv, AES_BLOCK_WORDS);
+      aes_encrypt(&round_key, state, AES_BLOCK_WORDS, ROUNDS_128);
+      store_state(out, state, AES_BLOCK_WORDS);
+      aes_increment_iv(internal_iv);
+    }
+    if (outlen) {
+      aes_block_t state;
+      load_state(state, internal_iv, AES_BLOCK_WORDS);
+      aes_encrypt(&round_key, state, AES_BLOCK_WORDS, ROUNDS_128);
+      uint8_t tmp[16];
+      store_state(tmp, state, AES_BLOCK_WORDS);
+      memcpy(out, tmp, outlen);
+    }
+  }
+
+  for (size_t i = 0; i < outlen; i++) {
+      out[i] ^= tmp[i];
   }
 }
 
