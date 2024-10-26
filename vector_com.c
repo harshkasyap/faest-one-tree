@@ -13,6 +13,8 @@
 #include "aes2.h"
 #include "utils.h"
 
+//extern void ccr_aes_ctx(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen);
+
 // TODO: probably can ditch most of the "restrict"s in inlined functions.
 
 #define TREE_CHUNK_SIZE (PRG_TREE_PREFERRED_WIDTH / 2)
@@ -718,7 +720,7 @@ void batch_vector_commit(
 	uint8_t local_iv[128] = {0};
 	memcpy(local_iv, &iv, sizeof(block128));
 
-	union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
+	//union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
 	uint8_t in[32], out[32], xor_buf[32];
 
 	// Expand tree nodes

@@ -3,9 +3,9 @@ COMMON_LD_FLAGS ?= -O2 -march=native -mtune=native -DNDEBUG # Benchmark
 # COMMON_LD_FLAGS ?= -O0 -march=native -mtune=native -ggdb -fsanitize=address -fsanitize=undefined # Debug Slow
 COMMON_CC_FLAGS ?= -pedantic-errors -Wall -Wextra -Wno-ignored-attributes $(COMMON_LD_FLAGS)
 
-CFLAGS ?= -std=c11 $(COMMON_CC_FLAGS)
-CXXFLAGS ?= -std=c++20 $(COMMON_CC_FLAGS)
-LDFLAGS += -lcrypto $(COMMON_LD_FLAGS)
+CFLAGS ?= -std=c11 $(COMMON_CC_FLAGS) -pthread -I/usr/local/include/ -I./ccr
+CXXFLAGS ?= -std=c++20 $(COMMON_CC_FLAGS) -pthread -I/usr/local/include/ -I./ccr
+LDFLAGS += -lcrypto -L/usr/local/lib/ -lemp-tool $(COMMON_LD_FLAGS) -pthread
 
 CP_L ?= cp -l
 MKDIR_P ?= mkdir -p
@@ -15,8 +15,11 @@ CPPFLAGS = $(ORIG_CPPFLAGS) -MMD -MP -MF $*.d
 
 export COMMON_LD_FLAGS COMMON_CC_FLAGS CFLAGS ORIG_CPPFLAGS CXXFLAGS LDFLAGS CP_L MKDIR_P
 
-common_headers = Catch2/extras/catch_amalgamated.hpp
-common_sources = $(common_headers) Catch2/extras/catch_amalgamated.cpp
+common_headers = Catch2/extras/catch_amalgamated.hpp ccr/ccr.h #ccr/aes_opt.h #ccr/aes_c.h ccr/block_c.h ccr/aes_opt.h
+common_sources = $(common_headers) Catch2/extras/catch_amalgamated.cpp ccr/ccr.cpp #ccr/aes_opt.cpp #ccr/aes_c.cpp ccr/block_c.cpp ccr/aes_opt.cpp
+
+#common_headers += ccr/aes_c.h ccr/block_c.h ccr/aes_opt.h
+#common_sources += ccr/aes_c.cpp ccr/block_c.cpp ccr/aes_opt.cpp
 
 submission_versions = sec128_cccs_11_0_pprf sec128_cccs_16_0_pprf sec192_cccs_16_0_pprf sec192_cccs_24_0_pprf sec256_cccs_22_0_pprf sec256_cccs_32_0_pprf sec128_eccs_11_0_pprf sec128_eccs_16_0_pprf sec192_eccs_16_0_pprf sec192_eccs_24_0_pprf sec256_eccs_22_0_pprf sec256_eccs_32_0_pprf
 
@@ -120,7 +123,7 @@ dist: $(foreach version,$(submission_versions),$(version)_avx2)
 	$(foreach version,$(submission_versions),\
 		$(foreach faest_name,$(shell python3 scripts/get_faest_name.py $(version)),\
 			$(MKDIR_P) Submission/$(faest_name) &&\
-			$(CP_L) Additional_Implementations/$(version)_avx2/*.{c,h,inc,macros,s} Additional_Implementations/$(version)_avx2/Makefile Submission/$(faest_name)/ &&\
+			$(CP_L) Additional_Implementations/$(version)_avx2/*.{c,cpp,h,inc,macros,s} Additional_Implementations/$(version)_avx2/Makefile Submission/$(faest_name)/ &&\
 		)\
 	) true
 

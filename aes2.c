@@ -7,10 +7,25 @@
 #endif
 
 #include "aes2.h"
-
 #include "fields.h"
 #include "compat.h"
 #include "utils.h"
+
+
+// Function declaration for the C++ function
+#ifdef __cplusplus
+extern "C" {
+#endif
+    void cppFunction();
+    void ccr_aes_ctx_cpp(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen);
+#ifdef __cplusplus
+}
+#endif
+
+//#include "ccr.h"
+//#include "aes_opt.h"
+//typedef __m128i block;
+//#include "emp-tool/emp-tool.h"
 
 #if defined(HAVE_OPENSSL)
 #include <openssl/evp.h>
@@ -24,6 +39,11 @@
 #define AES_BLOCK_WORDS 4
 #define RIJNDAEL_BLOCK_WORDS_192 6
 #define RIJNDAEL_BLOCK_WORDS_256 8
+
+/*
+extern "C" {
+    void ccr_aes_ctx(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen); // Declaration with C linkage
+}*/
 
 static const bf8_t round_constants[30] = {
     0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d, 0x9a,
@@ -764,7 +784,115 @@ void ccr_with_ctx(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t ou
   }
 }
 
+/*
+inline block makeBlock(uint64_t high, uint64_t low) {
+	return _mm_set_epi64x(high, low);
+}
+
+inline block sigma(block a) {
+	return _mm_shuffle_epi32(a, 78) ^ (a & makeBlock(0xFFFFFFFFFFFFFFFF, 0x00));
+}*/
+
+void ccr_aes_ctx(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
+  //cppFunction();
+  ccr_aes_ctx_cpp(in, iv, out, seclvl, outlen);
+}
+
+/*
+void ccr_aes_ctx(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
+  block user_key_1 [2];
+  block user_key_2 [2];
+  block round_key_1 [15];
+  block round_key_2 [15];
+  block hash_in [2];
+  block hash_out [2];
+
+  if (seclvl == 128) {
+    memcpy(&hash_in[0], in, sizeof(block));
+  } else if (seclvl == 192) {
+    uint8_t left_16[16];  //rl - 128
+    uint8_t right_8[8];   //rr - 64
+    memcpy(left_16, in, 16);
+    memcpy(right_8, in + 16, 8);
+    memcpy(&hash_in[0], left_16, sizeof(block));
+    memcpy(&hash_in[1], right_8, sizeof(block));
+
+    memset(user_key_1, 0, sizeof(user_key_1));
+    memset(user_key_2, 1, sizeof(user_key_2));
+    user_key_1[1] = hash_in[1];
+    user_key_2[1] = hash_in[1];
+  } else if (seclvl == 256) {  
+    uint8_t _left_16[16];  //rl - 128
+    uint8_t _right_16[16];   //rr - 128
+    memcpy(_left_16, in, 16);
+    memcpy(_right_16, in + 16, 16);
+    memcpy(&hash_in[0], _left_16, sizeof(block));
+    memcpy(&hash_in[1], _right_16, sizeof(block));
+
+    memset(user_key_1, 0, sizeof(user_key_1));
+    memset(user_key_2, 1, sizeof(user_key_2));
+    user_key_1[1] = hash_in[1];
+    user_key_2[1] = hash_in[1];
+  }
+
+  if (seclvl == 128) {
+      block in = sigma(hash_in[0]);
+      const block zero_block = makeBlock(0, 0);
+      AES_128_Key_Expansion((unsigned char *) &zero_block, (unsigned char *) round_key_1);
+      AES_ECB_encrypt((unsigned char *) &in,
+      (unsigned char *) hash_out,
+      sizeof(block),
+      (const char *) round_key_1,
+      10);
+      hash_out[0] = in ^ hash_out[0];
+
+  } else if (seclvl == 192) {
+      //memset(user_key_1, 0, sizeof(block));
+      //memset(user_key_2, 1, sizeof(block));
+      user_key_1[1] = hash_in[1];
+      user_key_2[1] = hash_in[1];
+      AES_192_Key_Expansion((unsigned char *) user_key_1, (unsigned char *) round_key_1);
+      AES_192_Key_Expansion((unsigned char *) user_key_2, (unsigned char *) round_key_2);
+      memcpy(user_key_2, user_key_1, sizeof(user_key_1));
+      block in = sigma(hash_in[0]);
+      AES_ECB_encrypt((unsigned char *) &in,
+      (unsigned char *) hash_out,
+      sizeof(block),
+      (char *) round_key_1,
+      12);
+      AES_ECB_encrypt((unsigned char *) &in,
+      (unsigned char *) hash_out + 1,
+      sizeof(block),
+      (char *) round_key_2,
+      12);
+      hash_out[0] = in ^ hash_out[0];
+      hash_out[1] = in ^ hash_out[1];
+  } else if (seclvl == 256) {
+      //memset(user_key_1, 0, sizeof(block));
+      //memset(user_key_2, 1, sizeof(block));
+      user_key_1[1] = hash_in[1];
+      user_key_2[1] = hash_in[1];
+      AES_256_Key_Expansion((unsigned char *) user_key_1, (unsigned char *) round_key_1);
+      AES_256_Key_Expansion((unsigned char *) user_key_2, (unsigned char *) round_key_2);
+      block in = sigma(hash_in[0]);
+      AES_ECB_encrypt((unsigned char *) &in,
+      (unsigned char *) hash_out,
+      sizeof(block),
+      (char *) round_key_1,
+      14);
+      AES_ECB_encrypt((unsigned char *) &in,
+      (unsigned char *) hash_out + 1,
+      sizeof(block),
+      (char *) round_key_2,
+      14);
+      hash_out[0] = in ^ hash_out[0];
+      hash_out[1] = in ^ hash_out[1];
+  }
+}
+*/
+
 // AES(ortho(x)) ^ ortho(x)
+/*
 void ccr_aes_ctx(const uint8_t* key, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
   static uint8_t tmp[32];
   ortho(key, tmp, outlen);
@@ -834,6 +962,7 @@ void ccr_aes_ctx(const uint8_t* key, const uint8_t* iv, uint8_t* out, unsigned i
       out[i] ^= tmp[i];
   }
 }
+*/
 
 void ccr_with_ctx_new(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t outlen) {
   switch (outlen*8) {
