@@ -88,19 +88,19 @@ $(objects)) : | headers
 # same for test files
 test-headers : $(test_headers) $(kat_headers) $(api_test_headers)
 .PHONY: test-headers
-$(test_objects) $(kat_objects) $(api_test_objects) $(SUBDIR)/api_test.o : | headers test-headers
+$(test_objects) $(kat_objects) $(api_test_objects) $(ccr_objects) $(SUBDIR)/api_test.o : | headers test-headers
 
 # target for test binary
-$(SUBDIR)/$(VARIANT)_test : $(test_objects) $(objects)
+$(SUBDIR)/$(VARIANT)_test : $(test_objects) $(objects) 
 	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(LDLIBS)
 
 $(SUBDIR)/$(VARIANT)_bench : $(test_bench_objects) $(objects)
 	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(LDLIBS)
 
-$(SUBDIR)/PQCgenKAT_sign : $(kat_objects) $(objects)
-	$(CC) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(LDLIBS)
+$(SUBDIR)/PQCgenKAT_sign : $(kat_objects) $(objects) $(ccr_objects)
+	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(LDLIBS)
 
-$(SUBDIR)/api_test : $(api_test_objects) $(objects)
+$(SUBDIR)/api_test : $(api_test_objects) $(objects) $(ccr_objects)
 	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(LDLIBS)
 
 # targets to create (sub)directories

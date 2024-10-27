@@ -15,7 +15,7 @@ CPPFLAGS = $(ORIG_CPPFLAGS) -MMD -MP -MF $*.d
 
 export COMMON_LD_FLAGS COMMON_CC_FLAGS CFLAGS ORIG_CPPFLAGS CXXFLAGS LDFLAGS CP_L MKDIR_P
 
-common_headers = Catch2/extras/catch_amalgamated.hpp ccr/ccr.h #ccr/aes_opt.h #ccr/aes_c.h ccr/block_c.h ccr/aes_opt.h
+common_headers = Catch2/extras/catch_amalgamated.hpp #ccr/ccr.h #ccr/aes_opt.h #ccr/aes_c.h ccr/block_c.h ccr/aes_opt.h
 common_sources = $(common_headers) Catch2/extras/catch_amalgamated.cpp ccr/ccr.cpp #ccr/aes_opt.cpp #ccr/aes_c.cpp ccr/block_c.cpp ccr/aes_opt.cpp
 
 #common_headers += ccr/aes_c.h ccr/block_c.h ccr/aes_opt.h
@@ -81,6 +81,12 @@ $(foreach src,$(common_sources),$(eval $(call link-recipe,Common,$(src),$(src)))
 
 export common_headers
 export common_objects
+
+ccr_sources = ccr/ccr.cpp
+ccr_objects := $(foreach obj,$(patsubst %.cpp,%.o,$(filter %.cpp,$(ccr_sources))),Common/$(notdir $(obj)))
+$(foreach src,$(ccr_sources),$(eval $(call link-recipe,Common,$(src),$(src))))
+export ccr_headers
+export ccr_objects
 
 headers-common : $(foreach header,$(common_headers),Common/$(notdir $(header)))
 .PHONY: headers-common

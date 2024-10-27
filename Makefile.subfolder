@@ -18,7 +18,7 @@ $(LIBFAEST): $(SOURCES:.c=.o) $(SOURCES:.s=.o) $(SOURCES:.cpp=.o)
 $(EXECUTABLE_NISTKAT): CPPFLAGS+=-DHAVE_RANDOMBYTES
 $(EXECUTABLE_NISTKAT): CFLAGS+=-Wno-sign-compare -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-result
 
-$(EXECUTABLE_APITEST): $(EXECUTABLE_APITEST).o $(LIBFAEST) randomness_os.o ccr.o
+$(EXECUTABLE_APITEST): $(EXECUTABLE_APITEST).o $(LIBFAEST) randomness_os.o
 
 $(EXECUTABLE_NISTKAT): $(NISTKAT_SOURCES:.c=.o) $(LIBFAEST) randomness_randombytes.o
 
