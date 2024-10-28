@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <omp.h>
 
 #include "prgs.h"
 #include "small_vole.h"
@@ -13,7 +14,7 @@
 #include "aes2.h"
 #include "utils.h"
 
-#define SECVAL 192 //@to-do need to fetch it automatically
+#define SECVAL 256 //@to-do need to fetch it automatically
 
 //extern void ccr_aes_ctx(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen);
 
@@ -590,7 +591,12 @@ void batch_vector_commit(
 	size_t next_to_expand_to = 1;
 	size_t chunk_size = 1;
 
+	clock_t start_time = clock();	
 	expand_chunk_switch(chunk_size, iv, &fixed_key_tree, &tree[next_to_expand_from], &tree[next_to_expand_to]);
+	clock_t end_time = clock();
+	double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+	//printf("Time taken to make PRG: %f seconds\n", time_taken);
+	
 	next_to_expand_from += chunk_size;
 	next_to_expand_to += 2 * chunk_size;
 	chunk_size *= 2;
@@ -600,16 +606,67 @@ void batch_vector_commit(
 	uint8_t in[bytes], out[bytes], xor_buf[bytes];
 
 	// Expand tree nodes
-	for (size_t i = 1; i < BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES; i++) {
+	/*for (size_t i = 1; i < BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES; i++) {
 		memcpy(in, &tree[i], sizeof(block_secpar));
 
+		clock_t start_time1 = clock();	
 		ccr_aes_ctx(in, out, lambda);
+		clock_t end_time1 = clock();
+		double time_taken1 = (double)(end_time1 - start_time1) / CLOCKS_PER_SEC;
+		
+		if (i == 1){
+			printf("Time taken to make 1271 CCR: %f seconds\n", time_taken1);
+		}
+		memcpy(&tree[2 * i + 1], out, sizeof(block_secpar));
+
+		// XOR the left child with the parent
+		xor_u8_array(in, out, xor_buf, bytes);
+		memcpy(&tree[2 * i + 2], xor_buf, sizeof(block_secpar));
+	}*/
+
+
+	uint8_t tin[TREE_CHUNK_SIZE][SECVAL/8] = {{0}};	
+	uint8_t tout[TREE_CHUNK_SIZE][SECVAL/8] = {{0}};	
+	uint8_t txor_buf[TREE_CHUNK_SIZE][SECVAL/8] = {{0}};	
+
+	for (size_t i = 1; i < BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES - TREE_CHUNK_SIZE; i+=TREE_CHUNK_SIZE) {
+		
+		for (size_t j = 0; j < TREE_CHUNK_SIZE; ++j) {
+			memcpy(tin[j], &tree[i + j], sizeof(block_secpar));
+		}
+
+		#pragma omp parallel for schedule(static)
+		for (size_t j = 0; j < TREE_CHUNK_SIZE; ++j) {
+			// Perform encryption on chunked inputs
+			ccr_aes_ctx(tin[j], tout[j], lambda);
+
+			// Store result and perform XOR operation
+			memcpy(&tree[2 * (i + j) + 1], tout[j], sizeof(block_secpar));
+			xor_u8_array(tin[j], tout[j], txor_buf[j], bytes);
+			memcpy(&tree[2 * (i + j) + 2], txor_buf[j], sizeof(block_secpar));
+		}
+	}
+	
+	//Gen Remaining Nodes
+	for (size_t i = ((BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES) - ((BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES) % TREE_CHUNK_SIZE)) + 1 ; 
+	i < BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES; i++) {
+		memcpy(in, &tree[i], sizeof(block_secpar));
+
+		clock_t start_time1 = clock();	
+		ccr_aes_ctx(in, out, lambda);
+		clock_t end_time1 = clock();
+		double time_taken1 = (double)(end_time1 - start_time1) / CLOCKS_PER_SEC;
+
 		memcpy(&tree[2 * i + 1], out, sizeof(block_secpar));
 
 		// XOR the left child with the parent
 		xor_u8_array(in, out, xor_buf, bytes);
 		memcpy(&tree[2 * i + 2], xor_buf, sizeof(block_secpar));
 	}
+
+	clock_t end_time2 = clock();
+	double time_taken2 = (double)(end_time2 - start_time) / CLOCKS_PER_SEC;
+	//printf("Time taken to gen Tree: %f seconds\n", time_taken2);
 
 	// Leaf calculations
 	next_to_expand_from = BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES;
@@ -650,7 +707,7 @@ void batch_vector_commit(
 			cseed_array + (BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) * bytes, sizeof(block_secpar));
 		}
 	}
-
+	free(cseed_array);
 	free(cout_array);
 }
 

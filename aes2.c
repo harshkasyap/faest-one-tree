@@ -10,6 +10,7 @@
 #include "fields.h"
 #include "compat.h"
 #include "utils.h"
+#include <omp.h>
 
 
 // Function declaration for the C++ function
@@ -1396,10 +1397,21 @@ void ccr2_x4_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* 
 void ccr2_x4_aes_ctx(unsigned int seclvl, const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, const uint8_t* src3,
              uint8_t* seed0, uint8_t* seed1, uint8_t* seed2, uint8_t* seed3,
              uint8_t* commitment0, uint8_t* commitment1, uint8_t* commitment2, uint8_t* commitment3) {
+  /*
   ccr2_aes_ctx(seclvl, src0, seed0, commitment0);
   ccr2_aes_ctx(seclvl, src1, seed1, commitment1);
   ccr2_aes_ctx(seclvl, src2, seed2, commitment2);
   ccr2_aes_ctx(seclvl, src3, seed3, commitment3);
+  */
+  const uint8_t* srcs[4] = {src0, src1, src2, src3};
+  uint8_t* seeds[4] = {seed0, seed1, seed2, seed3};
+  uint8_t* commitments[4] = {commitment0, commitment1, commitment2, commitment3};
+
+  #pragma omp parallel for schedule(static)
+  for (int i = 0; i < 4; i++) {
+      ccr2_aes_ctx(seclvl, srcs[i], seeds[i], commitments[i]);
+  }
+
 }
 
 void prg(const uint8_t* key, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
