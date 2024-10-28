@@ -18,6 +18,8 @@ extern "C" {
 #endif
     void cppFunction();
     void ccr_aes_ctx_cpp(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen);
+    void ccr_aes_ctx_tweaked(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen);
+    void ccr_aes_ctx_tweaked2(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen);
 #ifdef __cplusplus
 }
 #endif
@@ -784,17 +786,7 @@ void ccr_with_ctx(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t ou
   }
 }
 
-/*
-inline block makeBlock(uint64_t high, uint64_t low) {
-	return _mm_set_epi64x(high, low);
-}
-
-inline block sigma(block a) {
-	return _mm_shuffle_epi32(a, 78) ^ (a & makeBlock(0xFFFFFFFFFFFFFFFF, 0x00));
-}*/
-
 void ccr_aes_ctx(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
-  //cppFunction();
   ccr_aes_ctx_cpp(in, iv, out, seclvl, outlen);
 }
 
@@ -1169,6 +1161,16 @@ static inline void ccr_tweaked_with_ctx(union CCR_CTX* ctx, const uint8_t* in, u
   }
 }
 
+/*
+static inline void ccr_tweaked_aes_ctx(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
+  static uint8_t tmp[32];
+  ortho_tweaked(in, tmp, outlen);
+  permute_aes_ctx(tmp, out, outlen);
+  for (size_t i = 0; i < outlen; i++) {
+    out[i] ^= tmp[i];
+  }
+}*/
+
 static inline void ccr_tweaked_with_ctx_new(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t outlen) {
   switch (outlen*8) {
   
@@ -1247,6 +1249,17 @@ static inline void ccr_tweaked_with_ctx2(union CCR_CTX* ctx, const uint8_t* in, 
     out[i] ^= tmp[i];
   }
 }
+
+/*
+static inline void ccr_tweaked_aes_ctx2(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
+  static uint8_t tmp[32];
+  ortho_tweaked2(in, tmp, outlen);
+  permute_with_ctx(ctx, tmp, out, outlen);
+  for (size_t i = 0; i < outlen; i++) {
+    out[i] ^= tmp[i];
+  }
+}
+*/
 
 static inline void ccr_tweaked_with_ctx2_new(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t outlen) {
   switch (outlen*8) {
@@ -1344,6 +1357,58 @@ void ccr2_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* src
   CCR_CTX_free(&ctx, seclvl);
 }
 
+void ccr2_aes_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* src, uint8_t* seed, size_t seed_len,
+          uint8_t* commitment, size_t commitment_len) {
+  
+  union CCR_CTX ctx = CCR_CTX_setup_new(seclvl, iv, src);
+  //ccr_with_ctx_new(&ctx, src, seed, seed_len);
+  //ccr_tweaked_with_ctx(&ctx, src, seed, seed_len);
+  //ccr_aes_ctx(src, iv, seed, seclvl, seed_len);
+  
+  //ccr_aes_ctx_tweaked(src, iv, commitment, seclvl, commitment_len/2);
+  
+  //ccr_tweaked_with_ctx(&ctx, src, commitment, commitment_len/2);
+  //ccr_tweaked_with_ctx2(&ctx, src, commitment+(commitment_len/2), commitment_len/2);
+  
+  ccr_aes_ctx(src, iv, seed, seclvl, seed_len);
+
+  //ccr_tweaked_with_ctx(&ctx, src, commitment, commitment_len/2);
+  //ccr_tweaked_with_ctx2(&ctx, src, commitment+(commitment_len/2), commitment_len/2);
+  
+  ccr_aes_ctx_tweaked(src, iv, commitment, seclvl, commitment_len/2);
+  ccr_aes_ctx_tweaked2(src, iv, commitment+(commitment_len/2), seclvl, commitment_len/2);
+
+  //uint8_t* c1 = (uint8_t*)malloc(commitment_len/2);
+  //uint8_t* c2 = (uint8_t*)malloc(commitment_len/2);
+
+  //ccr_aes_ctx(src, iv, c1, seclvl, commitment_len/2);
+  //ccr_aes_ctx(src, iv, c2, seclvl, commitment_len/2);
+
+  /*
+  for (size_t i = 0; i < 16; ++i) {
+        printf("%02x ", seed[i]);
+    }
+
+	for (size_t i = 0; i < 16; ++i) {
+        printf("%02x ", c1[i]);
+    }
+
+  for (size_t i = 0; i < 16; ++i) {
+        printf("%02x ", c2[i]);
+    }    
+  */    
+
+  //memcpy(commitment, c1, commitment_len/2);         // Copy c1 to the first half
+  //memcpy(commitment + commitment_len/2, c2, commitment_len/2);
+  
+  //ccr_aes_ctx(&ctx, src, commitment, commitment_len/2);
+  //ccr_with_ctx(&ctx, src, commitment+(commitment_len/2), commitment_len/2);
+  
+  //ccr_aes_ctx_tweaked2(src, iv, commitment+(commitment_len/2), seclvl, commitment_len/2);
+
+  CCR_CTX_free(&ctx, seclvl);
+}
+
 void ccr2_x4(const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, const uint8_t* src3,
              const uint8_t* iv,
              uint8_t* seed0, uint8_t* seed1, uint8_t* seed2, uint8_t* seed3, size_t seed_len,
@@ -1371,6 +1436,15 @@ void ccr2_x4_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* 
   ccr2_without_ctx(seclvl, iv, src1, seed1, seed_len, commitment1, commitment_len);
   ccr2_without_ctx(seclvl, iv, src2, seed2, seed_len, commitment2, commitment_len);
   ccr2_without_ctx(seclvl, iv, src3, seed3, seed_len, commitment3, commitment_len);
+}
+
+void ccr2_x4_aes_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, const uint8_t* src3,
+             uint8_t* seed0, uint8_t* seed1, uint8_t* seed2, uint8_t* seed3, size_t seed_len,
+             uint8_t* commitment0, uint8_t* commitment1, uint8_t* commitment2, uint8_t* commitment3, size_t commitment_len) {
+  ccr2_aes_ctx(seclvl, iv, src0, seed0, seed_len, commitment0, commitment_len);
+  ccr2_aes_ctx(seclvl, iv, src1, seed1, seed_len, commitment1, commitment_len);
+  ccr2_aes_ctx(seclvl, iv, src2, seed2, seed_len, commitment2, commitment_len);
+  ccr2_aes_ctx(seclvl, iv, src3, seed3, seed_len, commitment3, commitment_len);
 }
 
 void prg(const uint8_t* key, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
