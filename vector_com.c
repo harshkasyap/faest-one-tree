@@ -13,7 +13,7 @@
 #include "aes2.h"
 #include "utils.h"
 
-#define SECVAL 256 //@to-do need to fetch it automatically
+#define SECVAL 192 //@to-do need to fetch it automatically
 
 //extern void ccr_aes_ctx(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen);
 
@@ -570,128 +570,6 @@ bool vector_verify(
 	return true;
 }
 
-/*
-void batch_vector_commit(
-	const block_secpar seed, block128 iv,
-	block_secpar* restrict tree, block_secpar* restrict leaves,
-	block_2secpar* restrict hashed_leaves)
-{
-	block_secpar fixed_key_iv = block_secpar_set_zero();
-	memcpy(&fixed_key_iv, &iv, sizeof(iv));
-	prg_tree_fixed_key fixed_key_tree;
-	prg_leaf_fixed_key fixed_key_leaf;
-	init_fixed_keys(&fixed_key_tree, &fixed_key_leaf, fixed_key_iv);
-
-	// copy seed to tree
-	memcpy(tree, &seed, sizeof(block_secpar));
-
-	size_t next_to_expand_from = 0;
-	size_t next_to_expand_to = 1;
-	
-	// root node
-	size_t chunck_size = 1;
-	
-	clock_t start_time = clock();
-	expand_chunk_switch(chunck_size, iv, &fixed_key_tree, &tree[ next_to_expand_from ], &tree[next_to_expand_to]);
-	clock_t end_time = clock();
-  	double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-  	//printf("Time taken for a PRG based expansion for a block: %f seconds\n", time_taken);
-
-	next_to_expand_from += chunck_size;
-	next_to_expand_to += 2*chunck_size;
-	chunck_size *= 2;
-
-	// setup a single context for all
-	// as of now need to manually change lambda and bytes (128,16), (192,24) or (256,32).
-	uint32_t lambda = 256;
-	uint32_t bytes = 32;
-	uint8_t* local_iv = (uint8_t*)malloc(128);
-	memcpy(local_iv, &iv, sizeof(block128));
-
-  	//union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
-
-	uint8_t* in = (uint8_t*)malloc(bytes);
-	uint8_t* out = (uint8_t*)malloc(bytes);
-	uint8_t* xor = (uint8_t*)malloc(bytes);
-
-	// expand the internals of tree far enough to have TREE_CHUNK_SIZE nodes.
-	for (size_t i = 1; i < BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES; i++) {
-		// the nodes are located in memory consecutively
-		
-		memcpy(in, &tree[i], sizeof(block_secpar));
-
-		//ccr_with_ctx(&ctx, in, out, bytes);
-		clock_t start_time1 = clock();
-		ccr_without_ctx(lambda, local_iv, in, out, bytes);
-		//printf("Time taken to for a CCR based expansion for a block: %f seconds\n",(double)(clock() - start_time1) / CLOCKS_PER_SEC);
-
-		memcpy(&tree[2 * i + 1], out, sizeof(block_secpar));
-
-		// xor the left child with the parent
-		xor_u8_array(in, out, xor, bytes);
-		memcpy(&tree[2 * i + 2], xor, sizeof(block_secpar));
-	}
-
-	next_to_expand_from = BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES;
-	next_to_expand_to = 2 * next_to_expand_from + 1;
-
-	// this block does not execute
-	size_t to_do = ( BATCH_VECTOR_COMMIT_NODES - next_to_expand_to ) > TREE_CHUNK_SIZE ? TREE_CHUNK_SIZE :  ( BATCH_VECTOR_COMMIT_NODES - next_to_expand_to ) ;
-	if (to_do)
-	{
-		expand_chunk_switch(to_do, iv, &fixed_key_tree, &tree[ next_to_expand_from ], &tree[next_to_expand_to]);
-		next_to_expand_from += to_do;
-		next_to_expand_to += 2*to_do;
-	}
-
-	uint8_t* cin0 = (uint8_t*)malloc(bytes);
-	uint8_t* cin1 = (uint8_t*)malloc(bytes);
-	uint8_t* cin2 = (uint8_t*)malloc(bytes);
-	uint8_t* cin3 = (uint8_t*)malloc(bytes);
-
-	uint8_t* cseed = (uint8_t*)malloc(bytes);
-	memset(cseed, 1, bytes);	
-
-	uint8_t* cout0 = (uint8_t*)malloc(bytes*2);
-	uint8_t* cout1 = (uint8_t*)malloc(bytes*2);
-	uint8_t* cout2 = (uint8_t*)malloc(bytes*2);
-	uint8_t* cout3 = (uint8_t*)malloc(bytes*2);
-
-	uint8_t** cout_array = (uint8_t**)malloc(BATCH_VECTOR_COMMIT_LEAVES*sizeof(uint8_t*));
-	
-	for (size_t i = 0; i < BATCH_VECTOR_COMMIT_LEAVES; ++i) {
-        cout_array[i] = (uint8_t*)malloc(bytes*2);
-    }
-
-	for (size_t i = 0; i < BATCH_VECTOR_COMMIT_LEAVES; i+= LEAF_CHUNK_SIZE)
-	{
-		memcpy(cin0, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 0], sizeof(block_secpar));
-		memcpy(cin1, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 1], sizeof(block_secpar));
-		memcpy(cin2, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 2], sizeof(block_secpar));
-		memcpy(cin3, &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 3], sizeof(block_secpar));
-					
-		ccr2_x4_without_ctx(lambda, local_iv, cin0, cin1, cin2, cin3,
-            cseed, cseed, cseed, cseed,
-            bytes,
-            cout_array[(i + 0)], cout_array[(i + 1)], cout_array[(i + 2)], cout_array[(i + 3)],
-            bytes * 2);
-	}
-
-	// write seeds and commitments to output
-	for (size_t vec_index = 0; vec_index < BITS_PER_WITNESS; vec_index++)
-	{
-		for (size_t leaf_index = 0; leaf_index < BATCH_VEC_LEN(vec_index); leaf_index++)
-		{
-			//leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)] = prg_output[3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1)];
-			//memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), prg_output + 3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) + 1, sizeof(block_2secpar));
-			memcpy(&hashed_leaves[BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index)], cout_array[(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1)], sizeof(block_2secpar));
-			memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], cseed, sizeof(block_secpar));
-		}
-	}
-	//CCR_CTX_free(&ctx, lambda);
-}
-*/
-
 void batch_vector_commit(
 	const block_secpar seed, block128 iv,
 	block_secpar* restrict tree, block_secpar* restrict leaves,
@@ -719,27 +597,13 @@ void batch_vector_commit(
 
 	// Set up CCR context
 	uint32_t lambda = SECVAL, bytes = SECVAL / 8;
-	uint8_t local_iv[128] = {0};
-	memcpy(local_iv, &iv, sizeof(block128));
-
-	//union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
 	uint8_t in[bytes], out[bytes], xor_buf[bytes];
 
 	// Expand tree nodes
 	for (size_t i = 1; i < BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES; i++) {
 		memcpy(in, &tree[i], sizeof(block_secpar));
 
-		//ccr_without_ctx(lambda, local_iv, in, out, bytes);
-		ccr_aes_ctx(in, local_iv, out, lambda, bytes);
-
-		//printf("\n %zu", i);
-		if (i == 11) {
-			for (size_t j = 0; j < 32; ++j) {
-				printf("%02x ", out[j]);
-			}
-			printf("\n ffdfdf \n");
-		}
-
+		ccr_aes_ctx(in, out, lambda);
 		memcpy(&tree[2 * i + 1], out, sizeof(block_secpar));
 
 		// XOR the left child with the parent
@@ -757,9 +621,7 @@ void batch_vector_commit(
 	}
 
 	// Setup buffers for batched commit operation
-	uint8_t cin[LEAF_CHUNK_SIZE][SECVAL/8] = {{0}};
-	uint8_t* cseed = (uint8_t*)malloc(bytes);
-	memset(cseed, 1, bytes);	
+	uint8_t cin[LEAF_CHUNK_SIZE][SECVAL/8] = {{0}};	
 	uint8_t* cseed_array = (uint8_t*)malloc(BATCH_VECTOR_COMMIT_LEAVES * bytes);
 	uint8_t* cout_array = (uint8_t*)malloc(BATCH_VECTOR_COMMIT_LEAVES * bytes * 2);
 
@@ -770,35 +632,12 @@ void batch_vector_commit(
 		}
 
 		// Compute ccr2_x4_with_ctx in batches
-		
-		/*
-		ccr2_x4_without_ctx(lambda, local_iv, cin[0], cin[1], cin[2], cin[3],
-			cseed, cseed, cseed, cseed, bytes,
-			cout_array + (i + 0) * bytes * 2, cout_array + (i + 1) * bytes * 2,
-			cout_array + (i + 2) * bytes * 2, cout_array + (i + 3) * bytes * 2,
-			bytes * 2);*/
-		
-		
-		ccr2_x4_aes_ctx(lambda, local_iv, cin[0], cin[1], cin[2], cin[3],
+		ccr2_x4_aes_ctx(lambda, cin[0], cin[1], cin[2], cin[3],
 			cseed_array + (i + 0) * bytes, cseed_array + (i + 1) * bytes,
 			cseed_array + (i + 2) * bytes, cseed_array + (i + 3) * bytes, 
-			bytes,
 			cout_array + (i + 0) * bytes * 2, cout_array + (i + 1) * bytes * 2,
-			cout_array + (i + 2) * bytes * 2, cout_array + (i + 3) * bytes * 2,
-			bytes * 2);
-
-
-		//printf("\n %zu", BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 3);
-		if (BATCH_VECTOR_COMMIT_LEAVES - 1 + i + 0 == 47091){
-			//printf("vvv %zu", i);
-			for (size_t j = 0; j < 32; ++j) {
-				printf(" aa%02x ", (cout_array + 22516*bytes*2)[j]);  // Print each byte in hex
-			}
-			printf("\n");
-		}	
-			
+			cout_array + (i + 2) * bytes * 2, cout_array + (i + 3) * bytes * 2);
 	}
-	//free(cseed);
 
 	// Write seeds and commitments to output
 	for (size_t vec_index = 0; vec_index < BITS_PER_WITNESS; vec_index++) {
@@ -807,14 +646,11 @@ void batch_vector_commit(
 				cout_array + (BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) * bytes * 2,
 				sizeof(block_2secpar));
 
-			//printf("\n %zu %zu %zu %zu", (BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) * 2, BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index), BATCH_VEC_POS_IN_TREE(vec_index, leaf_index), BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1);
-
-			memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], cseed_array + (BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) * bytes, sizeof(block_secpar));
-			//memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], &cseed, sizeof(block_secpar));
+			memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], 
+			cseed_array + (BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) * bytes, sizeof(block_secpar));
 		}
 	}
 
-	//CCR_CTX_free(&ctx, lambda);
 	free(cout_array);
 }
 
@@ -1056,16 +892,12 @@ bool batch_vector_verify(
 
 	// setup a single context for all
 	uint32_t lambda = SECVAL, bytes = SECVAL / 8;
-	uint8_t local_iv[128] = {0};
-	memcpy(local_iv, &iv, sizeof(block128));
-	union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
 	uint8_t *in = malloc(bytes), *out = malloc(bytes), *xor = malloc(bytes);
 
 	for (size_t node = 0; node < BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES; node++) {
 		if (!dont_reveal[node]) {
 			memcpy(in, &tree[node], sizeof(block_secpar));
-			//ccr_without_ctx(lambda, local_iv, in, out, bytes);
-			ccr_aes_ctx(in, local_iv, out, lambda, bytes);
+			ccr_aes_ctx(in, out, lambda);
 			memcpy(&tree[2 * node + 1], out, sizeof(block_secpar));
 			xor_u8_array(in, out, xor, bytes);
 			memcpy(&tree[2 * node + 2], xor, sizeof(block_secpar));
@@ -1082,154 +914,8 @@ bool batch_vector_verify(
 		{
 			size_t pos = BATCH_VEC_POS_IN_TREE(vec_index, leaf_index);
 			if(!dont_reveal[pos]) {
-				// write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
 				memcpy(cin, &tree[pos], sizeof(block_secpar));
-				ccr2_aes_ctx(lambda, local_iv, cin, cseed, bytes, cout, bytes * 2);
-				
-				if (pos==47091){
-					 for (size_t i = 0; i < 32; ++i) {
-							printf("yy%02x ", cout[i]);
-						}
-				}
-				
-				//printf("\n %zu, %zu, %zu", pos, BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
-				memcpy(&hashed_leaves[BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index)], cout, sizeof(block_2secpar));
-				memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index])], cseed, sizeof(block_secpar));
-			}
-		}
-	}
-end:
-	// Free allocated memory
-	free(tree);
-	//CCR_CTX_free(&ctx, lambda);
-	return success;
-}
-
-/*
-bool batch_vector_verify(
-	block128 iv, const unsigned char* restrict opening, const uint8_t* restrict delta,
-	block_secpar* restrict leaves, block_2secpar* restrict hashed_leaves)
-{
-	bool success = 1;
-	block_secpar fixed_key_iv = block_secpar_set_zero();
-	memcpy(&fixed_key_iv, &iv, sizeof(iv));
-	prg_tree_fixed_key fixed_key_tree;
-	prg_leaf_fixed_key fixed_key_leaf;
-	init_fixed_keys(&fixed_key_tree, &fixed_key_leaf, fixed_key_iv);
-	block_secpar* tree =
-		aligned_alloc(alignof(block_secpar), BATCH_VECTOR_COMMIT_NODES * sizeof(block_secpar));
-
-	uint8_t dont_reveal[BATCH_VECTOR_COMMIT_NODES] = {0};
-	size_t opening_bytes_read = 0;
-
-	// check if top bits are zero if not all bits of delta are used
-	for (size_t i = NONZERO_BITS_IN_CHALLENGE_3; i < SECURITY_PARAM; i++)
-	{
-		if( delta[i] != 0)
-			return 0;
-	}
-
-	// parse delta
-	size_t delta_parsed[BITS_PER_WITNESS];
-	for (size_t vec_index = 0; vec_index < BITS_PER_WITNESS; ++vec_index)
-	{
-		unsigned int depth = vec_index < VOLES_MAX_K ? VOLE_MAX_K : VOLE_MIN_K;
-
-		// read i-th leaf index from delta
-		delta_parsed[vec_index] = 0;
-		for (int d = depth-1; d >=0; --d)
-			delta_parsed[vec_index] = 2*delta_parsed[vec_index] + (delta[d] & 1);
-		delta += depth;
-
-		// mark leaf nodes that should not be revealed
-		size_t pos = BATCH_VEC_POS_IN_TREE(vec_index, delta_parsed[vec_index]);
-		dont_reveal[pos] = 1;
-
-		// copy commitment from opening and set missing leaf to 0.
-		memcpy(&hashed_leaves[BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, delta_parsed[vec_index])], opening + opening_bytes_read, sizeof(block_2secpar));
-		memset(&leaves[       BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, 0)], 0, sizeof(block_secpar));
-		opening_bytes_read += sizeof(block_2secpar);
-	}
-
-	// work way up tree
-	for (int i = BATCH_VECTOR_COMMIT_LEAVES - 2 ; i >= 0; i--)
-	{
-		// dont reveal node i if one of its children should not be revealed
-		dont_reveal[i] = dont_reveal[2*i + 1] || dont_reveal[2*i + 2];
-
-		// if exactly one of the children can be revealed, copy from opening
-		if(dont_reveal[2*i + 1] ^ dont_reveal[2*i + 2]){
-			if(opening_bytes_read >= BATCH_VECTOR_OPENING_SIZE){
-				success = 0; // opening is invalid
-				goto end;
-			}
-			memcpy( &tree[2*i + 1 + dont_reveal[2*i + 1]], opening + opening_bytes_read, sizeof(block_secpar) );
-			opening_bytes_read += sizeof(block_secpar);
-		}
-	}
-
-	while (opening_bytes_read < BATCH_VECTOR_OPENING_SIZE)
-	{
-		if (opening[opening_bytes_read++] != 0){
-			success = 0; // opening is invalid
-			goto end;
-		}
-	}
-
-	// work way down tree
-	size_t node = 0;
-	expand_chunk(0, 1, 2, iv, &fixed_key_tree, &fixed_key_leaf, &tree[ node ], &tree[2*node + 1]);
-	node = 1;
-
-	// setup a single context for all
-	//printf("here");
-	uint32_t lambda = 256;
-	uint32_t bytes = 32;
-	uint8_t* local_iv = (uint8_t*)malloc(128);
-	memcpy(local_iv, &iv, sizeof(block128));
-
-  	//union CCR_CTX ctx = CCR_CTX_setup(lambda, local_iv);
-
-	uint8_t* in = (uint8_t*)malloc(bytes);
-	uint8_t* out = (uint8_t*)malloc(bytes);
-	uint8_t* xor = (uint8_t*)malloc(bytes);
-
-	//printf("\nverify %zu %zu", BATCH_VECTOR_COMMIT_NODES, BATCH_VECTOR_COMMIT_LEAVES);
-
-	for (; node <  BATCH_VECTOR_COMMIT_NODES - BATCH_VECTOR_COMMIT_LEAVES; node++)
-	{
-		// if exactly one of the children can be revealed, copy from opening
-		if(dont_reveal[node] == 0){
-			//expand_chunk(0, 1, 2, iv, &fixed_key_tree, &fixed_key_leaf, &tree[ node ], &tree[2*node + 1]);
-			memcpy(in, &tree[node], sizeof(block_secpar));
-
-			//ccr_with_ctx(&ctx, in, out, bytes);
-			ccr_without_ctx(lambda, local_iv, in, out, bytes);
-			memcpy(&tree[2 * node + 1], out, sizeof(block_secpar));
-			// xor the left child with the parent
-			xor_u8_array(in, out, xor, bytes);
-			memcpy(&tree[2 * node + 2], xor, sizeof(block_secpar));
-		}
-	}
-
-	uint8_t* cin = (uint8_t*)malloc(bytes);
-	uint8_t* ccrseed = (uint8_t*)malloc(bytes);
-	memset(ccrseed, 1, bytes);	
-	uint8_t* cseed = (uint8_t*)malloc(bytes);
-	memset(cseed, 1, bytes);	
-	uint8_t* cout = (uint8_t*)malloc(bytes*2);
-
-	for (size_t vec_index = 0; vec_index < BITS_PER_WITNESS; vec_index++)
-	{
-		for (size_t leaf_index = 0; leaf_index < BATCH_VEC_LEN(vec_index); leaf_index++)
-		{
-			size_t pos = BATCH_VEC_POS_IN_TREE(vec_index, leaf_index);
-			if(dont_reveal[pos] == 0) {
-				// write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
-				memcpy(cin, &tree[pos], sizeof(block_secpar));
-				//ccr2_with_ctx(&ctx, cin, ccrseed, bytes, cout, bytes * 2);
-				ccr2_without_ctx(lambda, local_iv, cin, ccrseed, bytes, cout, bytes * 2);
-
+				ccr2_aes_ctx(lambda, cin, cseed, cout);
 				memcpy(&hashed_leaves[BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index)], cout, sizeof(block_2secpar));
 				memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index])], cseed, sizeof(block_secpar));
 			}
@@ -1237,7 +923,5 @@ bool batch_vector_verify(
 	}
 end:
 	free(tree);
-	//CCR_CTX_free(&ctx, lambda);
 	return success;
 }
-*/

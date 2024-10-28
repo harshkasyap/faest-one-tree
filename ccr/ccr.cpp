@@ -1,6 +1,4 @@
-//#include "ccr.h"
 #include "emp-tool/emp-tool.h"
-//#include "emp-tool/utils/aes_opt.h"
 
 #include <iostream>
 using namespace std;
@@ -11,16 +9,13 @@ extern "C" {
     void cppFunction() {
         std::cout << "Hello from C++ function!" << std::endl;
     }
-    void ccr_aes_ctx_cpp(const uint8_t* inp, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
+    void ccr_aes_ctx_cpp(const uint8_t* inp, uint8_t* out, unsigned int seclvl) {
         block user_key_1 [2];
         block user_key_2 [2];
         block round_key_1 [15];
         block round_key_2 [15];
         block hash_in [2];
         block hash_out [2];
-
-        //memset(out, 1, outlen);	
-        //return;
 
         if (seclvl == 128) {
             memcpy(&hash_in[0], inp, 16);
@@ -30,17 +25,11 @@ extern "C" {
             memcpy(left_16, inp, 16);
             memcpy(right_8, inp + 16, 8);
             memcpy(&hash_in[0], left_16, 16);
-
-            //memset(&hash_in[1], 0, 16);        // Zero out hash_in[1] to prevent any garbage data
             memcpy(&hash_in[1], right_8, 8);
-            //memset(&hash_in[1] + 8, 0, 8);
-            //memcpy(&hash_in[1], left_16, 8);
-            //memcpy((uint8_t*)&hash_in[1] + 8, right_8, 8);
 
-            /*
-            for (size_t i = 0; i < 8; ++i) {
-                    printf("%02x ", right_8[i]);
-            }*/
+            //dummy initialisation
+            memcpy(&hash_out[0], left_16, 16);
+            memcpy(&hash_out[1], right_8, 8);
 
             memset(user_key_1, 0, sizeof(user_key_1));
             memset(user_key_2, 1, sizeof(user_key_2));
@@ -53,6 +42,10 @@ extern "C" {
             memcpy(_right_16, inp + 16, 16);
             memcpy(&hash_in[0], _left_16, 16);
             memcpy(&hash_in[1], _right_16, 16);
+
+            //dummy initialisation
+            memcpy(&hash_out[0], _left_16, 16);
+            memcpy(&hash_out[1], _right_16, 16);
 
             memset(user_key_1, 0, sizeof(user_key_1));
             memset(user_key_2, 1, sizeof(user_key_2));
@@ -72,10 +65,6 @@ extern "C" {
             hash_out[0] = in ^ hash_out[0];
             memcpy(out, &hash_out[0], 16);
         } else if (seclvl == 192) {
-            //memset(user_key_1, 0, sizeof(block));
-            //memset(user_key_2, 1, sizeof(block));
-            //user_key_1[1] = hash_in[1];
-            //user_key_2[1] = hash_in[1];
             AES_192_Key_Expansion((unsigned char *) user_key_1, (unsigned char *) round_key_1);
             AES_192_Key_Expansion((unsigned char *) user_key_2, (unsigned char *) round_key_2);
             memcpy(user_key_2, user_key_1, sizeof(user_key_1));
@@ -93,14 +82,9 @@ extern "C" {
             hash_out[0] = in ^ hash_out[0];
             hash_out[1] = in ^ hash_out[1];
 
-            memset(out, 1, outlen);	
             memcpy(out, &hash_out[0], 16);
-            //memcpy(out + 16, &hash_out[1], 8); ////@to-do lets fix it later.
+            memcpy(out + 16, &hash_out[1], 8);
         } else if (seclvl == 256) {
-            //memset(user_key_1, 0, sizeof(block));
-            //memset(user_key_2, 1, sizeof(block));
-            //user_key_1[1] = hash_in[1];
-            //user_key_2[1] = hash_in[1];
             AES_256_Key_Expansion((unsigned char *) user_key_1, (unsigned char *) round_key_1);
             AES_256_Key_Expansion((unsigned char *) user_key_2, (unsigned char *) round_key_2);
             block in = sigma(hash_in[0]);
@@ -117,22 +101,18 @@ extern "C" {
             hash_out[0] = in ^ hash_out[0];
             hash_out[1] = in ^ hash_out[1];
 
-            memset(out, 1, outlen);	
             memcpy(out, &hash_out[0], 16);
-            //memcpy(out + 16, &hash_out[1], 16); ////@to-do lets fix it later.
+            memcpy(out + 16, &hash_out[1], 16);
         }
     }
 
-    void ccr_aes_ctx_tweaked(const uint8_t* inp, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
+    void ccr_aes_ctx_tweaked(const uint8_t* inp, uint8_t* out, unsigned int seclvl) {
         block user_key_1 [2];
         block user_key_2 [2];
         block round_key_1 [15];
         block round_key_2 [15];
         block hash_in [2];
         block hash_out [2];
-
-        //memset(out, 1, outlen);	
-        //return;
 
         if (seclvl == 128) {
             memcpy(&hash_in[0], inp, 16);
@@ -142,17 +122,11 @@ extern "C" {
             memcpy(left_16, inp, 16);
             memcpy(right_8, inp + 16, 8);
             memcpy(&hash_in[0], left_16, 16);
-
-            //memset(&hash_in[1], 0, 16);        // Zero out hash_in[1] to prevent any garbage data
             memcpy(&hash_in[1], right_8, 8);
-            //memset(&hash_in[1] + 8, 0, 8);
-            //memcpy(&hash_in[1], left_16, 8);
-            //memcpy((uint8_t*)&hash_in[1] + 8, right_8, 8);
 
-            /*
-            for (size_t i = 0; i < 8; ++i) {
-                    printf("%02x ", right_8[i]);
-            }*/
+            //dummy initialisation
+            memcpy(&hash_out[0], left_16, 16);
+            memcpy(&hash_out[1], right_8, 8);
 
             memset(user_key_1, 0, sizeof(user_key_1));
             memset(user_key_2, 1, sizeof(user_key_2));
@@ -165,6 +139,10 @@ extern "C" {
             memcpy(_right_16, inp + 16, 16);
             memcpy(&hash_in[0], _left_16, 16);
             memcpy(&hash_in[1], _right_16, 16);
+
+            //dummy initialisation
+            memcpy(&hash_out[0], _left_16, 16);
+            memcpy(&hash_out[1], _right_16, 16);
 
             memset(user_key_1, 0, sizeof(user_key_1));
             memset(user_key_2, 1, sizeof(user_key_2));
@@ -186,10 +164,6 @@ extern "C" {
             hash_out[0] = in ^ hash_out[0];
             memcpy(out, &hash_out[0], 16);
         } else if (seclvl == 192) {
-            //memset(user_key_1, 0, sizeof(block));
-            //memset(user_key_2, 1, sizeof(block));
-            //user_key_1[1] = hash_in[1];
-            //user_key_2[1] = hash_in[1];
             AES_192_Key_Expansion((unsigned char *) user_key_1, (unsigned char *) round_key_1);
             AES_192_Key_Expansion((unsigned char *) user_key_2, (unsigned char *) round_key_2);
             memcpy(user_key_2, user_key_1, sizeof(user_key_1));
@@ -209,14 +183,10 @@ extern "C" {
             hash_out[0] = in ^ hash_out[0];
             hash_out[1] = in ^ hash_out[1];
 
-            memset(out, 1, outlen);	
+            memset(out, 1, 24);	
             memcpy(out, &hash_out[0], 16);
-            //memcpy(out + 16, &hash_out[1], 8); ////@to-do lets fix it later.
+            memcpy(out + 16, &hash_out[1], 8);
         } else if (seclvl == 256) {
-            //memset(user_key_1, 0, sizeof(block));
-            //memset(user_key_2, 1, sizeof(block));
-            //user_key_1[1] = hash_in[1];
-            //user_key_2[1] = hash_in[1];
             AES_256_Key_Expansion((unsigned char *) user_key_1, (unsigned char *) round_key_1);
             AES_256_Key_Expansion((unsigned char *) user_key_2, (unsigned char *) round_key_2);
             block in = sigma(hash_in[0]);
@@ -235,22 +205,18 @@ extern "C" {
             hash_out[0] = in ^ hash_out[0];
             hash_out[1] = in ^ hash_out[1];
 
-            memset(out, 1, outlen);	
             memcpy(out, &hash_out[0], 16);
-            //memcpy(out + 16, &hash_out[1], 16); ////@to-do lets fix it later.
+            memcpy(out + 16, &hash_out[1], 16);
         }
     }
 
-    void ccr_aes_ctx_tweaked2(const uint8_t* inp, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen) {
+    void ccr_aes_ctx_tweaked2(const uint8_t* inp, uint8_t* out, unsigned int seclvl) {
         block user_key_1 [2];
         block user_key_2 [2];
         block round_key_1 [15];
         block round_key_2 [15];
         block hash_in [2];
         block hash_out [2];
-
-        //memset(out, 1, outlen);	
-        //return;
 
         if (seclvl == 128) {
             memcpy(&hash_in[0], inp, 16);
@@ -260,17 +226,11 @@ extern "C" {
             memcpy(left_16, inp, 16);
             memcpy(right_8, inp + 16, 8);
             memcpy(&hash_in[0], left_16, 16);
-
-            //memset(&hash_in[1], 0, 16);        // Zero out hash_in[1] to prevent any garbage data
             memcpy(&hash_in[1], right_8, 8);
-            //memset(&hash_in[1] + 8, 0, 8);
-            //memcpy(&hash_in[1], left_16, 8);
-            //memcpy((uint8_t*)&hash_in[1] + 8, right_8, 8);
 
-            /*
-            for (size_t i = 0; i < 8; ++i) {
-                    printf("%02x ", right_8[i]);
-            }*/
+            //dummy initialisation
+            memcpy(&hash_out[0], left_16, 16);
+            memcpy(&hash_out[1], right_8, 8);
 
             memset(user_key_1, 0, sizeof(user_key_1));
             memset(user_key_2, 1, sizeof(user_key_2));
@@ -283,6 +243,10 @@ extern "C" {
             memcpy(_right_16, inp + 16, 16);
             memcpy(&hash_in[0], _left_16, 16);
             memcpy(&hash_in[1], _right_16, 16);
+
+            //dummy initialisation
+            memcpy(&hash_out[0], _left_16, 16);
+            memcpy(&hash_out[1], _right_16, 16);
 
             memset(user_key_1, 0, sizeof(user_key_1));
             memset(user_key_2, 1, sizeof(user_key_2));
@@ -304,10 +268,6 @@ extern "C" {
             hash_out[0] = in ^ hash_out[0];
             memcpy(out, &hash_out[0], 16);
         } else if (seclvl == 192) {
-            //memset(user_key_1, 0, sizeof(block));
-            //memset(user_key_2, 1, sizeof(block));
-            //user_key_1[1] = hash_in[1];
-            //user_key_2[1] = hash_in[1];
             AES_192_Key_Expansion((unsigned char *) user_key_1, (unsigned char *) round_key_1);
             AES_192_Key_Expansion((unsigned char *) user_key_2, (unsigned char *) round_key_2);
             memcpy(user_key_2, user_key_1, sizeof(user_key_1));
@@ -327,14 +287,9 @@ extern "C" {
             hash_out[0] = in ^ hash_out[0];
             hash_out[1] = in ^ hash_out[1];
 
-            memset(out, 1, outlen);	
             memcpy(out, &hash_out[0], 16);
-            //memcpy(out + 16, &hash_out[1], 8); ////@to-do lets fix it later.
+            memcpy(out + 16, &hash_out[1], 8);
         } else if (seclvl == 256) {
-            //memset(user_key_1, 0, sizeof(block));
-            //memset(user_key_2, 1, sizeof(block));
-            //user_key_1[1] = hash_in[1];
-            //user_key_2[1] = hash_in[1];
             AES_256_Key_Expansion((unsigned char *) user_key_1, (unsigned char *) round_key_1);
             AES_256_Key_Expansion((unsigned char *) user_key_2, (unsigned char *) round_key_2);
             block in = sigma(hash_in[0]);
@@ -353,9 +308,8 @@ extern "C" {
             hash_out[0] = in ^ hash_out[0];
             hash_out[1] = in ^ hash_out[1];
 
-            memset(out, 1, outlen);	
             memcpy(out, &hash_out[0], 16);
-            //memcpy(out + 16, &hash_out[1], 16); ////@to-do lets fix it later.
+            memcpy(out + 16, &hash_out[1], 16);
         }
     }
 
