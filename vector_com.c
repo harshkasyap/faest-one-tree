@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "prgs.h"
 #include "small_vole.h"
@@ -12,7 +13,7 @@
 #include "aes2.h"
 #include "utils.h"
 
-#define SECVAL 256
+#define SECVAL 128
 
 // TODO: probably can ditch most of the "restrict"s in inlined functions.
 
@@ -731,7 +732,9 @@ bool force_vector_open(const block_secpar* restrict forest, const block_2secpar*
 			vector_open(forest, hashed_leaves, delta_bytes, opening);
 			bool b = true;
 #else
+			clock_t open_time = clock();	
 			bool b = batch_vector_open(forest, hashed_leaves, delta_bytes, opening);
+			printf("Time taken to open: %f seconds\n", (double)(clock() - open_time) / CLOCKS_PER_SEC);
 #endif
 
 			if (b) {

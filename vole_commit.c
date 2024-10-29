@@ -6,6 +6,7 @@
 #include "vector_com.h"
 #include "hash.h"
 #include "stdio.h"
+#include <time.h>
 
 static void hash_hashed_leaves_all_same_size(
 	hash_state* hasher, block_2secpar* hashed_leaves, size_t num_trees, size_t num_leaves)
@@ -64,7 +65,9 @@ void vole_commit(
 #if USE_IMPROVED_VECTOR_COMMITMENTS == 0
 	vector_commit(seed, iv, forest, leaves, hashed_leaves);
 #else
+	clock_t commit_time = clock();	
 	batch_vector_commit(seed, iv, forest, leaves, hashed_leaves);
+	printf("Time taken to commit: %f seconds\n", (double)(clock() - commit_time) / CLOCKS_PER_SEC);
 #endif
 
 	hash_hashed_leaves(hashed_leaves, check);
