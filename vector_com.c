@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "time.h"
 #include "prgs.h"
 #include "small_vole.h"
 #include "util.h"
@@ -573,6 +574,8 @@ void batch_vector_commit(
 	prg_leaf_fixed_key fixed_key_leaf;
 	init_fixed_keys(&fixed_key_tree, &fixed_key_leaf, fixed_key_iv);
 
+	clock_t start_time = clock();
+
 	// copy seed to tree
 	memcpy(tree, &seed, sizeof(block_secpar));
 
@@ -606,6 +609,10 @@ void batch_vector_commit(
 		next_to_expand_to += 2*to_do;
 	}
 
+	printf("Time taken to gen tree: %f seconds\n", (double)(clock() - start_time) / CLOCKS_PER_SEC);
+
+	clock_t commit_time = clock();
+
 	// expand leaves
 	block_secpar *prg_output = aligned_alloc(alignof(block_secpar), 3*BATCH_VECTOR_COMMIT_LEAVES * sizeof(block_secpar));
 	for (size_t i = 0; i < BATCH_VECTOR_COMMIT_LEAVES; i+= LEAF_CHUNK_SIZE)
@@ -615,25 +622,22 @@ void batch_vector_commit(
 	// expand last chunk (overlaps with what we already did)
 	expand_chunk_leaf_n_leaf_chunk_size(iv, &fixed_key_leaf, tree + BATCH_VECTOR_COMMIT_NODES - 1 - LEAF_CHUNK_SIZE, prg_output + 3*(BATCH_VECTOR_COMMIT_LEAVES-1-LEAF_CHUNK_SIZE));
 
-	uint8_t* cseed = (uint8_t*)malloc(16);
-	memset(cseed, 1, 16);	
-	uint8_t* c2seed = (uint8_t*)malloc(32);
-	memset(c2seed, 1, 32);	
-
 	// write seeds and commitments to output
 	for (size_t vec_index = 0; vec_index < BITS_PER_WITNESS; vec_index++)
 	{
 		for (size_t leaf_index = 0; leaf_index < BATCH_VEC_LEN(vec_index); leaf_index++)
 		{
 			//printf("\n 3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) %zu", 3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1));
-			//leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)] = prg_output[3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1)];
+			leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)] = prg_output[3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1)];
 			memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), prg_output + 3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) + 1, sizeof(block_2secpar));
 
-			memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], cseed, sizeof(block_secpar));
+			//memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], cseed, sizeof(block_secpar));
 			//memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), c2seed, sizeof(block_2secpar));
 		}
 	}
 	free(prg_output);
+
+	printf("Time taken to commit: %f seconds\n", (double)(clock() - commit_time) / CLOCKS_PER_SEC);
 }
 
 bool force_vector_open(const block_secpar* restrict forest, const block_2secpar* restrict hashed_leaves, uint8_t* restrict delta_out, unsigned char* restrict opening, const unsigned char *message, size_t m_len, uint32_t *out_counter){
@@ -874,10 +878,6 @@ bool batch_vector_verify(
 		}
 	}
 
-	uint8_t* cseed = (uint8_t*)malloc(16);
-	memset(cseed, 1, 16);	
-	uint8_t* c2seed = (uint8_t*)malloc(32);
-	memset(c2seed, 1, 32);	
 	for (size_t vec_index = 0; vec_index < BITS_PER_WITNESS; vec_index++)
 	{
 		for (size_t leaf_index = 0; leaf_index < BATCH_VEC_LEN(vec_index); leaf_index++)
@@ -886,7 +886,7 @@ bool batch_vector_verify(
 			if(dont_reveal[pos] == 0)
 				//write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
 				write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
-				memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index])], cseed, sizeof(block_secpar));
+				//memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index])], cseed, sizeof(block_secpar));
 				//memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), c2seed, sizeof(block_2secpar));				
 		}
 	}

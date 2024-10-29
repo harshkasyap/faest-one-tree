@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 #include <inttypes.h>
 #include <immintrin.h>
 #include <wmmintrin.h>
@@ -275,6 +276,55 @@ inline void aes_ctr(
 
 	memcpy(output, state, num_keys * num_blocks * sizeof(block128));
 }
+
+/*
+inline void aes_ctr(
+	const aes_round_keys* restrict aeses,
+	size_t num_keys, uint32_t num_blocks, uint32_t counter, block128* restrict output)
+{
+	// Upper bound just to avoid VLAs.
+	assert(num_keys * num_blocks <= 3 * AES_PREFERRED_WIDTH);
+	block128 state[3 * AES_PREFERRED_WIDTH];
+
+	uint64_t counter64 = counter;
+	uint64_t counter_max = counter64 + num_blocks;
+
+	bool bad_iv = false;
+	#ifdef __GNUC__
+	_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
+	#endif
+	for (size_t i = 0; i < num_keys; ++i)
+		if (aes_is_iv_bad(aeses[i].iv, counter_max))
+			bad_iv = true;
+
+	if (bad_iv)
+	{
+		#ifdef __GNUC__
+		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
+		#endif
+		for (size_t l = 0; l < num_keys; ++l)
+			for (uint32_t m = 0; m < num_blocks; ++m)
+				state[l * num_blocks + m] = aes_add_counter_to_iv_bad(aeses[l].iv, counter64 + m);
+	}
+	else
+	{
+		#ifdef __GNUC__
+		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
+		#endif
+		for (size_t l = 0; l < num_keys; ++l)
+			for (uint32_t m = 0; m < num_blocks; ++m)
+				state[l * num_blocks + m] = aes_add_counter_to_iv_good(aeses[l].iv, counter64 + m);
+	}
+
+	// Make it easier for the compiler to optimize by unwinding the first and last rounds. (Since we
+	// aren't asking it to unwind the whole loop.)
+	aes_round(aeses, state, num_keys, num_blocks, 0);
+	for (int round = 1; round < AES_ROUNDS; ++round)
+		aes_round(aeses, state, num_keys, num_blocks, round);
+	aes_round(aeses, state, num_keys, num_blocks, AES_ROUNDS);
+
+	memcpy(output, state, num_keys * num_blocks * sizeof(block128));
+}*/
 
 inline void aes_fixed_key_ctr(
 	const aes_round_keys* restrict fixed_key, const block128* restrict keys,
