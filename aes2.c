@@ -18,9 +18,8 @@
 extern "C" {
 #endif
     void cppFunction();
-    void ccr_aes_ctx_cpp(const uint8_t* in, uint8_t* out, unsigned int seclvl);
-    void ccr_aes_ctx_tweaked(const uint8_t* in, uint8_t* out, unsigned int seclvl);
-    void ccr_aes_ctx_tweaked2(const uint8_t* in, uint8_t* out, unsigned int seclvl);
+    void ccr_aes_ctx_cpp(const uint8_t* in, uint8_t* out, unsigned int seclvl, unsigned int tweak);
+    void ccr_aes_ctx_cpp_batched(uint8_t tin[4][SECLVL / 8], uint8_t tout[4][SECLVL / 8], unsigned int seclvl, unsigned int tweak);
 #ifdef __cplusplus
 }
 #endif
@@ -787,8 +786,12 @@ void ccr_with_ctx(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t ou
   }
 }
 
-void ccr_aes_ctx(const uint8_t* in, uint8_t* out, unsigned int seclvl) {
-  ccr_aes_ctx_cpp(in, out, seclvl);
+void ccr_aes_ctx(const uint8_t* in, uint8_t* out, unsigned int seclvl, unsigned int tweak) {
+  ccr_aes_ctx_cpp(in, out, seclvl, tweak);
+}
+
+void ccr_aes_ctx_batched(uint8_t tin[4][SECLVL/8], uint8_t tout[4][SECLVL/8], unsigned int seclvl, unsigned int tweak) {
+  ccr_aes_ctx_cpp_batched(tin, tout, seclvl, tweak);
 }
 
 /*
@@ -1360,9 +1363,12 @@ void ccr2_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* src
 
 void ccr2_aes_ctx(unsigned int seclvl, const uint8_t* src, uint8_t* seed,
           uint8_t* commitment) {
-  ccr_aes_ctx(src, seed, seclvl);
-  ccr_aes_ctx_tweaked(src, commitment, seclvl);
-  ccr_aes_ctx_tweaked2(src, commitment+(seclvl/8), seclvl);
+  ccr_aes_ctx(src, seed, seclvl, 0);
+  ccr_aes_ctx(src, commitment, seclvl, 1);
+  ccr_aes_ctx(src, commitment+(seclvl/8), seclvl, 2);
+  
+  //ccr_aes_ctx_tweaked(src, commitment, seclvl);
+  //ccr_aes_ctx_tweaked2(src, commitment+(seclvl/8), seclvl);
 }
 
 void ccr2_x4(const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, const uint8_t* src3,

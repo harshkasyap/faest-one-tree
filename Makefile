@@ -5,13 +5,13 @@ COMMON_CC_FLAGS ?= -pedantic-errors -Wall -Wextra -Wno-ignored-attributes $(COMM
 
 CFLAGS ?= -std=c11 $(COMMON_CC_FLAGS) -pthread -I/usr/local/include/ -I./ccr
 CXXFLAGS ?= -std=c++20 $(COMMON_CC_FLAGS) -pthread -I/usr/local/include/ -I./ccr
-LDFLAGS += -lcrypto -L/usr/local/lib/ -lemp-tool $(COMMON_LD_FLAGS) -pthread
+LDFLAGS += -lcrypto -L/usr/local/lib/ -fopenmp -lemp-tool $(COMMON_LD_FLAGS) -pthread
 
 CP_L ?= cp -l
 MKDIR_P ?= mkdir -p
 
 ORIG_CPPFLAGS := $(CPPFLAGS)
-CPPFLAGS = $(ORIG_CPPFLAGS) -MMD -MP -MF $*.d
+CPPFLAGS = $(ORIG_CPPFLAGS) -fopenmp -MMD -MP -MF $*.d
 
 export COMMON_LD_FLAGS COMMON_CC_FLAGS CFLAGS ORIG_CPPFLAGS CXXFLAGS LDFLAGS CP_L MKDIR_P
 
