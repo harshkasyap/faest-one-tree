@@ -65,7 +65,7 @@ void vole_commit(
 #if USE_IMPROVED_VECTOR_COMMITMENTS == 0
 	vector_commit(seed, iv, forest, leaves, hashed_leaves);
 #else
-	clock_t start_time = clock();
+	//clock_t start_time = clock();
 	batch_vector_commit(seed, iv, forest, leaves, hashed_leaves);
 	//printf("Time taken to batch commit: %f seconds\n",(double)(clock() - start_time) / CLOCKS_PER_SEC);
 #endif
@@ -114,7 +114,7 @@ bool vole_reconstruct(
 #if USE_IMPROVED_VECTOR_COMMITMENTS == 0
 	bool vector_verify_status = vector_verify(iv, opening, delta_bytes, leaves, hashed_leaves);
 #else
-	clock_t start_time = clock();
+	//clock_t start_time = clock();
 	bool vector_verify_status = batch_vector_verify(iv, opening, delta_bytes, leaves, hashed_leaves);
 	//printf("Time taken to batch verify: %f seconds\n",(double)(clock() - start_time) / CLOCKS_PER_SEC);
 	//printf("here2 %zu", vector_verify_status);
