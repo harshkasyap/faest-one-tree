@@ -4,12 +4,15 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "aesp.h"
 #include "time.h"
 #include "prgs.h"
 #include "small_vole.h"
 #include "util.h"
 #include "hash.h"
 #include "stdio.h"
+
+#define SECLVL 256
 
 // TODO: probably can ditch most of the "restrict"s in inlined functions.
 
@@ -37,6 +40,20 @@ static ALWAYS_INLINE void copy_prg_output(
 // Take each of n block_secpars from input and expand it into stretch adjacent blocks in output.
 // fixed_key_tree, fixed_key_leaf is only used for PRGs based on fixed-key Rijndael. Works for
 // n <= TREE_CHUNK_SIZE (or LEAF_CHUNK_SIZE if leaf).
+static ALWAYS_INLINE void expand_chunk(
+	bool leaf, size_t n, uint32_t stretch, block128 iv,
+	const prg_tree_fixed_key* restrict fixed_key_tree,
+	const prg_leaf_fixed_key* restrict fixed_key_leaf,
+	const block_secpar* restrict input, block_secpar* restrict output)
+{
+	for (size_t i = 0; i < n; ++i)
+	{
+		
+		prg(input[i], iv, output[i], SECLVL, lambda_bytes * stretch);
+	}
+}
+
+/*
 static ALWAYS_INLINE void expand_chunk(
 	bool leaf, size_t n, uint32_t stretch, block128 iv,
 	const prg_tree_fixed_key* restrict fixed_key_tree,
@@ -95,7 +112,7 @@ static ALWAYS_INLINE void expand_chunk(
 			                prg_output_tree, prg_output_leaf, output);
 
 	}
-}
+}*/
 
 // Allow n to be hardcoded by the compiler into expand_chunk:
 #define DEF_EXPAND_CHUNK_N(n) \
