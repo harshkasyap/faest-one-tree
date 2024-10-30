@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 
 #if defined(__WIN32__)
 #define LL_FMT "%I64u"
@@ -18,6 +19,26 @@
 #define SIZET_FMT "%Iu"
 #else
 #define SIZET_FMT "%zu"
+#endif
+
+// cpu cycles
+//  Windows
+#ifdef _WIN32
+
+#include <intrin.h>
+uint64_t rdtsc(){
+    return __rdtsc();
+}
+
+//  Linux/GCC
+#else
+
+uint64_t rdtsc() {
+    unsigned int lo,hi;
+    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+    return ((uint64_t)hi << 32) | lo;
+}
+
 #endif
 
 int main(void) {
@@ -34,20 +55,24 @@ int main(void) {
   }
 
   unsigned long long smlen = sizeof(sm);
+  uint64_t sign_cycle = rdtsc();
   clock_t start_time = clock();
   ret                      = crypto_sign(sm, &smlen, message, sizeof(message), sk);
   clock_t end_time = clock();
   double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
   printf("Time taken to sign: %f seconds\n", time_taken);
+  printf("Sign cpu cycles: %ld\n", rdtsc() - sign_cycle);
   if (ret != 0) {
     printf("Failed to sign\n");
     return -1;
   }
 
   unsigned long long mlen = sizeof(omessage);
+  uint64_t verify_cycle = rdtsc();
   clock_t start_time1 = clock();
   ret                     = crypto_sign_open(omessage, &mlen, sm, smlen, pk);
   printf("Time taken to verify: %f seconds\n",(double)(clock() - start_time1) / CLOCKS_PER_SEC);
+  printf("Verify cpu cycles: %ld\n", rdtsc() - verify_cycle);
   if (ret != 0) {
     printf("Failed to verify (ret = %d)\n", ret);
     return -1;
