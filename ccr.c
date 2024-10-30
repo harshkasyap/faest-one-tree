@@ -1,11 +1,8 @@
-#include "emp-tool/emp-tool.h"
-
-#include <thread>
-#include <iostream>
-using namespace std;
-using namespace emp;
-#include <chrono>
+#include "ccr.h"
 #include <time.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdalign.h>  // for alignas
 
 // Define STRINGIZE to convert macro expressions into strings for _Pragma usage
 /*
@@ -22,12 +19,15 @@ using namespace emp;
 // Define AES_PREFERRED_WIDTH based on your needs (example: 4)
 // #define AES_PREFERRED_WIDTH 4
 
-extern "C" {
-    void cppFunction() {
-        std::cout << "Hello from C++ function!" << std::endl;
+    inline block makeBlock(uint64_t high, uint64_t low) {
+	    return _mm_set_epi64x(high, low);
+    }
+
+    inline block sigma(block a) {
+        return _mm_shuffle_epi32(a, 78) ^ (a & makeBlock(0xFFFFFFFFFFFFFFFF, 0x00));
     }
     
-    void process_hash1(block *hash_in, unsigned int seclvl, block *hash_out, unsigned int tweak = 0) {
+    void process_hash1(block *hash_in, unsigned int seclvl, block *hash_out, unsigned int tweak) {
         block user_key_1 [2];
         block user_key_2 [2];
         block round_key_1 [15];
@@ -96,7 +96,7 @@ extern "C" {
         }
     }
 
-    void process_hash(block *hash_in, unsigned int seclvl, block *hash_out, unsigned int tweak = 0) {
+    void process_hash(block *hash_in, unsigned int seclvl, block *hash_out, unsigned int tweak) {
         block user_key_1 [2];
         block user_key_2 [2];
         block round_key_1 [15];
@@ -165,7 +165,163 @@ extern "C" {
         }
     }
 
-     void AES_ECB_encrypt1(block *in, // pointer to the PLAINTEXT
+    void AES_128_Key_Expansion(const unsigned char *userkey, unsigned char *key)
+	{
+		__m128i temp1, temp2;
+		__m128i *Key_Schedule = (__m128i *)key;
+		temp1 = _mm_loadu_si128((__m128i *)userkey);
+		Key_Schedule[0] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x1);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[1] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x2);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[2] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x4);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[3] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x8);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[4] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x10);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[5] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x20);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[6] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x40);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[7] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x80);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[8] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x1b);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[9] = temp1;
+		temp2 = _mm_aeskeygenassist_si128(temp1, 0x36);
+		temp1 = AES_128_ASSIST(temp1, temp2);
+		Key_Schedule[10] = temp1;
+	}
+
+    void AES_192_Key_Expansion(const unsigned char *userkey, unsigned char *key)
+	{
+		__m128i temp1, temp2, temp3, temp4;
+		__m128i *Key_Schedule = (__m128i *)key;
+		temp1 = _mm_loadu_si128((__m128i *)userkey);
+		temp3 = _mm_loadu_si128((__m128i *)(userkey + 16));
+		Key_Schedule[0] = temp1;
+		Key_Schedule[1] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x1);
+		KEY_192_ASSIST(&temp1, &temp2, &temp3);
+		Key_Schedule[1] = (__m128i)_mm_shuffle_pd((__m128d)Key_Schedule[1],
+												  (__m128d)temp1, 0);
+		Key_Schedule[2] = (__m128i)_mm_shuffle_pd((__m128d)temp1, (__m128d)temp3, 1);
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x2);
+		KEY_192_ASSIST(&temp1, &temp2, &temp3);
+		Key_Schedule[3] = temp1;
+		Key_Schedule[4] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x4);
+		KEY_192_ASSIST(&temp1, &temp2, &temp3);
+		Key_Schedule[4] = (__m128i)_mm_shuffle_pd((__m128d)Key_Schedule[4],
+												  (__m128d)temp1, 0);
+		Key_Schedule[5] = (__m128i)_mm_shuffle_pd((__m128d)temp1, (__m128d)temp3, 1);
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x8);
+		KEY_192_ASSIST(&temp1, &temp2, &temp3);
+		Key_Schedule[6] = temp1;
+		Key_Schedule[7] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x10);
+		KEY_192_ASSIST(&temp1, &temp2, &temp3);
+		Key_Schedule[7] = (__m128i)_mm_shuffle_pd((__m128d)Key_Schedule[7],
+												  (__m128d)temp1, 0);
+		Key_Schedule[8] = (__m128i)_mm_shuffle_pd((__m128d)temp1, (__m128d)temp3, 1);
+
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x20);
+		KEY_192_ASSIST(&temp1, &temp2, &temp3);
+		Key_Schedule[9] = temp1;
+		Key_Schedule[10] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x40);
+		KEY_192_ASSIST(&temp1, &temp2, &temp3);
+		Key_Schedule[10] = (__m128i)_mm_shuffle_pd((__m128d)Key_Schedule[10],
+												   (__m128d)temp1, 0);
+		Key_Schedule[11] = (__m128i)_mm_shuffle_pd((__m128d)temp1, (__m128d)temp3, 1);
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x80);
+		KEY_192_ASSIST(&temp1, &temp2, &temp3);
+		Key_Schedule[12] = temp1;
+	}
+
+    void AES_256_Key_Expansion(const unsigned char *userkey, unsigned char *key)
+	{
+		__m128i temp1, temp2, temp3;
+		__m128i *Key_Schedule = (__m128i *)key;
+		temp1 = _mm_loadu_si128((__m128i *)userkey);
+		temp3 = _mm_loadu_si128((__m128i *)(userkey + 16));
+		Key_Schedule[0] = temp1;
+		Key_Schedule[1] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x01);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[2] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[3] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x02);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[4] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[5] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x04);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[6] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[7] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x08);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[8] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[9] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x10);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[10] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[11] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x20);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[12] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[13] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x40);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[14] = temp1;
+	}
+
+	void AES_ECB_encrypt(const unsigned char *in, // pointer to the PLAINTEXT
+						 unsigned char *out,	  // pointer to the CIPHERTEXT buffer
+						 unsigned long length,	  // text length in bytes
+						 const char *key,		  // pointer to the expanded key schedule
+						 int number_of_rounds)	  // number of AES rounds 10,12 or 14
+
+	{
+		__m128i tmp;
+		int i, j;
+		if (length % 16)
+			length = length / 16 + 1;
+		else
+			length = length / 16;
+		
+		//UNROLL_LOOP
+		for (i = 0; i < length; i++)
+		{
+			tmp = _mm_loadu_si128(&((__m128i *)in)[i]);
+			tmp = _mm_xor_si128(tmp, ((__m128i *)key)[0]);
+
+			for (j = 1; j < number_of_rounds; j++)
+			{
+				tmp = _mm_aesenc_si128(tmp, ((__m128i *)key)[j]);
+			}
+			tmp = _mm_aesenclast_si128(tmp, ((__m128i *)key)[j]);
+			_mm_storeu_si128(&((__m128i *)out)[i], tmp);
+		}
+	}
+
+    void AES_ECB_encrypt1(block *in, // pointer to the PLAINTEXT
 						  block out [4][2],	  // pointer to the CIPHERTEXT buffer
 						  block key [4][15], int pos) // pointer to the expanded key schedule
 	{
@@ -536,7 +692,6 @@ extern "C" {
         }
 	}
 
-    /*
     void ccr_aes_ctx_cpp_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak) {
         alignas(16) block hash_in [4][2];
         alignas(16) block hash_out [4][2];
@@ -607,7 +762,7 @@ extern "C" {
                 memcpy(&tout[i * outlen] + 16, &hash_out[i][1], (seclvl == 192) ? 8 : 16);
             }
         }
-    }*/
+    }
 
     /*
     void ccr_aes_ctx_cpp_batched(uint8_t tin[4][SECLVL/8], uint8_t tout[4][SECLVL/8], unsigned int seclvl, unsigned int tweak) {
@@ -742,22 +897,22 @@ extern "C" {
         }
     }*/
 
-    
-    void ccr_aes_ctx_cpp_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak) {
+    /*
+    void ccr_aes_ctx_cpp_batched(uint8_t tin[4][SECLVL/8], uint8_t tout[4][SECLVL/8], unsigned int seclvl) {
         for (size_t i = 0; i < 4; ++i) {
                 block hash_in [2];
                 block hash_out [2];
 
                 if (seclvl == 128) {
-                    memcpy(&hash_in[0], tin[i * outlen], 16);
+                    memcpy(&hash_in[0], tin[i], 16);
                 } else if (seclvl == 192 || seclvl == 256) {
                     size_t right_size = (seclvl == 192) ? 8 : 16; // size for right part
-                    memcpy(&hash_in[0], tin[i * outlen], 16);
-                    memcpy(&hash_in[1], tin[i * outlen] + 16, right_size);
+                    memcpy(&hash_in[0], tin[i], 16);
+                    memcpy(&hash_in[1], tin[i] + 16, right_size);
 
                     //dummy init
-                    memcpy(&hash_out[0], tin[i * outlen], 16);
-                    memcpy(&hash_out[1], tin[i * outlen] + 16, right_size);
+                    memcpy(&hash_out[0], tin[i], 16);
+                    memcpy(&hash_out[1], tin[i] + 16, right_size);
                 }
 
                 // Process the hash
@@ -765,18 +920,18 @@ extern "C" {
 
                 // Output results
                 if (seclvl == 128) {
-                    memcpy(tout[i * outlen], &hash_out[0], 16);
+                    memcpy(tout[i], &hash_out[0], 16);
                 } else if (seclvl == 192) {
-                    memcpy(tout[i * outlen], &hash_out[0], 16);
-                    memcpy(tout[i * outlen] + 16, &hash_out[1], 8);
+                    memcpy(tout[i], &hash_out[0], 16);
+                    memcpy(tout[i] + 16, &hash_out[1], 8);
                 } else if (seclvl == 256) {
-                    memcpy(tout[i * outlen], &hash_out[0], 16);
-                    memcpy(tout[i * outlen] + 16, &hash_out[1], 16);
+                    memcpy(tout[i], &hash_out[0], 16);
+                    memcpy(tout[i] + 16, &hash_out[1], 16);
                 }
         }
-    }
+    }*/
 
-    void ccr_aes_ctx_cpp(const uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak = 0) {
+    void ccr_aes_ctx_cpp(const uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak) {
         block hash_in [2];
         block hash_out [2];
 
@@ -806,24 +961,3 @@ extern "C" {
             memcpy(tout + 16, &hash_out[1], 16);
         }
     }
-
-}
-
-//  Windows
-#ifdef _WIN32
-
-#include <intrin.h>
-uint64_t rdtsc(){
-    return __rdtsc();
-}
-
-//  Linux/GCC
-#else
-
-uint64_t rdtsc(){
-    unsigned int lo,hi;
-    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
-    return ((uint64_t)hi << 32) | lo;
-}
-
-#endif

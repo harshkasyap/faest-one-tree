@@ -97,10 +97,10 @@ $(SUBDIR)/$(VARIANT)_test : $(test_objects) $(objects)
 $(SUBDIR)/$(VARIANT)_bench : $(test_bench_objects) $(objects)
 	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(LDLIBS)
 
-$(SUBDIR)/PQCgenKAT_sign : $(kat_objects) $(objects) $(ccr_objects)
-	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(LDLIBS)
+$(SUBDIR)/PQCgenKAT_sign : $(kat_objects) $(objects) #$(ccr_objects)
+	$(CC) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(LDLIBS)
 
-$(SUBDIR)/api_test : $(api_test_objects) $(objects) $(ccr_objects)
+$(SUBDIR)/api_test : $(api_test_objects) $(objects) #$(ccr_objects)
 	$(CXX) -o $@ $^ $(LDLIBS) $(LDFLAGS) $(LDLIBS)
 
 # targets to create (sub)directories

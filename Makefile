@@ -3,20 +3,20 @@ COMMON_LD_FLAGS ?= -O2 -march=native -mtune=native -DNDEBUG # Benchmark
 # COMMON_LD_FLAGS ?= -O0 -march=native -mtune=native -ggdb -fsanitize=address -fsanitize=undefined # Debug Slow
 COMMON_CC_FLAGS ?= -pedantic-errors -Wall -Wextra -Wno-ignored-attributes $(COMMON_LD_FLAGS)
 
-CFLAGS ?= -std=c11 $(COMMON_CC_FLAGS) -pthread -I/usr/local/include/ -I./ccr
-CXXFLAGS ?= -std=c++20 $(COMMON_CC_FLAGS) -pthread -I/usr/local/include/ -I./ccr
-LDFLAGS += -lcrypto -L/usr/local/lib/ -fopenmp -lemp-tool $(COMMON_LD_FLAGS) -pthread
+CFLAGS ?= -std=c11 $(COMMON_CC_FLAGS) -pthread
+CXXFLAGS ?= -std=c++20 $(COMMON_CC_FLAGS) -pthread
+LDFLAGS += -lcrypto -L/usr/local/lib/ $(COMMON_LD_FLAGS) -pthread
 
 CP_L ?= cp -l
 MKDIR_P ?= mkdir -p
 
 ORIG_CPPFLAGS := $(CPPFLAGS)
-CPPFLAGS = $(ORIG_CPPFLAGS) -fopenmp -MMD -MP -MF $*.d
+CPPFLAGS = $(ORIG_CPPFLAGS) -MMD -MP -MF $*.d
 
 export COMMON_LD_FLAGS COMMON_CC_FLAGS CFLAGS ORIG_CPPFLAGS CXXFLAGS LDFLAGS CP_L MKDIR_P
 
 common_headers = Catch2/extras/catch_amalgamated.hpp #ccr/ccr.h #ccr/aes_opt.h #ccr/aes_c.h ccr/block_c.h ccr/aes_opt.h
-common_sources = $(common_headers) Catch2/extras/catch_amalgamated.cpp ccr/ccr.cpp #ccr/aes_opt.cpp #ccr/aes_c.cpp ccr/block_c.cpp ccr/aes_opt.cpp
+common_sources = $(common_headers) Catch2/extras/catch_amalgamated.cpp #ccr/ccr.cpp #ccr/aes_opt.cpp #ccr/aes_c.cpp ccr/block_c.cpp ccr/aes_opt.cpp
 
 #common_headers += ccr/aes_c.h ccr/block_c.h ccr/aes_opt.h
 #common_sources += ccr/aes_c.cpp ccr/block_c.cpp ccr/aes_opt.cpp
@@ -82,11 +82,11 @@ $(foreach src,$(common_sources),$(eval $(call link-recipe,Common,$(src),$(src)))
 export common_headers
 export common_objects
 
-ccr_sources = ccr/ccr.cpp
-ccr_objects := $(foreach obj,$(patsubst %.cpp,%.o,$(filter %.cpp,$(ccr_sources))),Common/$(notdir $(obj)))
-$(foreach src,$(ccr_sources),$(eval $(call link-recipe,Common,$(src),$(src))))
-export ccr_headers
-export ccr_objects
+#ccr_sources = ccr/ccr.cpp
+#ccr_objects := $(foreach obj,$(patsubst %.cpp,%.o,$(filter %.cpp,$(ccr_sources))),Common/$(notdir $(obj)))
+#$(foreach src,$(ccr_sources),$(eval $(call link-recipe,Common,$(src),$(src))))
+#export ccr_headers
+#export ccr_objects
 
 headers-common : $(foreach header,$(common_headers),Common/$(notdir $(header)))
 .PHONY: headers-common

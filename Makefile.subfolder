@@ -1,4 +1,4 @@
-CC?=g++
+CC?=cc
 CXX?=g++
 CFLAGS+=-g -O2 -march=native -mtune=native -std=c11 
 CPPFLAGS+=-DHAVE_OPENSSL -DNDEBUG -MMD -MP -MF $*.d

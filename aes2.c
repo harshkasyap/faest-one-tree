@@ -14,6 +14,7 @@
 
 
 // Function declaration for the C++ function
+/*
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -23,8 +24,9 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+*/
 
-//#include "ccr.h"
+#include "ccr.h"
 //#include "aes_opt.h"
 //typedef __m128i block;
 //#include "emp-tool/emp-tool.h"

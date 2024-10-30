@@ -659,7 +659,7 @@ void batch_vector_commit(
 		}
 
 		
-		//ccr_aes_ctx_batched(tin, tout, lambda, 0);
+		ccr_aes_ctx_batched(tin, tout, lambda, 0);
 		
 		
 		//#pragma omp parallel for schedule(static)
