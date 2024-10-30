@@ -4,13 +4,14 @@
 #include "emp-tool/utils/aes.h"
 
 // Define STRINGIZE to convert macro expressions into strings for _Pragma usage
+/*
 #ifdef __GNUC__
     #define STRINGIZE(x) #x
     #define UNROLL_LOOP _Pragma(STRINGIZE(GCC unroll (12)))
 #else
     #define UNROLL_LOOP
 #endif
-
+*/
 namespace emp
 {
 
@@ -211,7 +212,7 @@ namespace emp
 		else
 			length = length / 16;
 		
-		UNROLL_LOOP
+		//UNROLL_LOOP
 		for (i = 0; i < length; i++)
 		{
 			tmp = _mm_loadu_si128(&((__m128i *)in)[i]);

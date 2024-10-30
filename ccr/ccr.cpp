@@ -9,9 +9,9 @@ using namespace emp;
 // Define STRINGIZE to convert macro expressions into strings for _Pragma usage
 #ifdef __GNUC__
     #define STRINGIZE(x) #x
-    #define UNROLL_LOOP _Pragma(STRINGIZE(GCC unroll (4)))
+    //#define UNROLL_LOOP _Pragma(STRINGIZE(GCC unroll (10)))
 #else
-    #define UNROLL_LOOP
+    //#define UNROLL_LOOP
 #endif
 
 // Define AES_PREFERRED_WIDTH based on your needs (example: 4)
@@ -160,6 +160,90 @@ extern "C" {
         }
     }
 
+    void AES_256_Key_Expansion1(const unsigned char *userkey, unsigned char *key)
+	{
+		__m128i temp1, temp2, temp3;
+		__m128i *Key_Schedule = (__m128i *)key;
+		temp1 = _mm_loadu_si128((__m128i *)userkey);
+		temp3 = _mm_loadu_si128((__m128i *)(userkey + 16));
+		Key_Schedule[0] = temp1;
+		Key_Schedule[1] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x01);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[2] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[3] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x02);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[4] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[5] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x04);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[6] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[7] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x08);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[8] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[9] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x10);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[10] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[11] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x20);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[12] = temp1;
+		KEY_256_ASSIST_2(&temp1, &temp3);
+		Key_Schedule[13] = temp3;
+		temp2 = _mm_aeskeygenassist_si128(temp3, 0x40);
+		KEY_256_ASSIST_1(&temp1, &temp2);
+		Key_Schedule[14] = temp1;
+	}
+
+
+    void AES_ECB_encrypt1(block *in, // pointer to the PLAINTEXT
+						  block out [4][2],	  // pointer to the CIPHERTEXT buffer
+						  block key [4][15], int pos) // pointer to the expanded key schedule
+	{
+        int number_of_rounds = 14;
+        unsigned long length = sizeof(block);
+
+        __m128i tmp [4];
+
+        if (length % 16)
+            length = length / 16 + 1;
+        else
+            length = length / 16;
+
+        #ifdef __GNUC__
+        _Pragma(STRINGIZE(GCC unroll (2*4)))
+        #endif
+        for (int p = 0; p < 4; p++) {
+            tmp[p] = _mm_loadu_si128(&((__m128i *)(unsigned char *)&in[p])[0]);
+            tmp[p] = _mm_xor_si128(tmp[p], ((__m128i *)(char *)key[p])[0]);
+        }
+
+        for (int r = 1; r < number_of_rounds; r++) {
+            #ifdef __GNUC__
+            _Pragma(STRINGIZE(GCC unroll (4)))
+            #endif
+            for (int p = 0; p < 4; p++) { 
+                tmp[p] = _mm_aesenc_si128(tmp[p], ((__m128i *)(char *)key[p])[r]);
+            }
+        }
+        
+        #ifdef __GNUC__
+        _Pragma(STRINGIZE(GCC unroll (2*4)))
+        #endif
+        for (int p = 0; p < 4; p++) {
+            tmp[p] = _mm_aesenclast_si128(tmp[p], ((__m128i *)(char *)key[p])[number_of_rounds]);
+            _mm_storeu_si128(&((__m128i *)((unsigned char *)out[p] + pos))[0], tmp[p]);
+        }
+	}
+
     void ccr_aes_ctx_cpp_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak) {
         block hash_in [4][2];
         block hash_out [4][2];
@@ -204,33 +288,36 @@ extern "C" {
         if (seclvl == 128) {
             const block zero_block = makeBlock(0, 0);
     
-            UNROLL_LOOP
+            //
             for (size_t i = 0; i < 4; ++i)
                 AES_128_Key_Expansion((unsigned char *) &zero_block, (unsigned char *) round_key_1[i]);
 
-            UNROLL_LOOP
+            AES_ECB_encrypt1(in, hash_out, round_key_1, 0);
+            //UNROLL_LOOP
+            /*
             for (size_t i = 0; i < 4; ++i)
                 AES_ECB_encrypt((unsigned char *) &in[i],
                 (unsigned char *) hash_out[i],
                 sizeof(block),
                 (const char *) round_key_1[i],
                 10);
+            */
         }
 
         if (seclvl == 192) {
-            UNROLL_LOOP
+            //UNROLL_LOOP
             for (size_t i = 0; i < 4; ++i)
                 AES_192_Key_Expansion((unsigned char *) user_key_1[i], (unsigned char *) round_key_1[i]);
 
-            UNROLL_LOOP
+            //UNROLL_LOOP
             for (size_t i = 0; i < 4; ++i)
                 AES_192_Key_Expansion((unsigned char *) user_key_2[i], (unsigned char *) round_key_2[i]);
             
-            UNROLL_LOOP
+            //UNROLL_LOOP
             for (size_t i = 0; i < 4; ++i)
                 memcpy(user_key_2[i], user_key_1[i], sizeof(user_key_1[i]));
 
-            UNROLL_LOOP
+            //UNROLL_LOOP
             for (size_t i = 0; i < 4; ++i)
                 AES_ECB_encrypt((unsigned char *) &in[i],
                 (unsigned char *) hash_out[i],
@@ -238,7 +325,7 @@ extern "C" {
                 (char *) round_key_1[i],
                 12);
             
-            UNROLL_LOOP
+            //UNROLL_LOOP
             for (size_t i = 0; i < 4; ++i)
                 AES_ECB_encrypt((unsigned char *) &in[i],
                 (unsigned char *) hash_out[i] + 1,
@@ -248,29 +335,35 @@ extern "C" {
         }
 
         if (seclvl == 256) {
-            UNROLL_LOOP
+            //UNROLL_LOOP
             for (size_t i = 0; i < 4; ++i)
                 AES_256_Key_Expansion((unsigned char *) user_key_1[i], (unsigned char *) round_key_1[i]);
 
-            UNROLL_LOOP
+            //UNROLL_LOOP
             for (size_t i = 0; i < 4; ++i)
                 AES_256_Key_Expansion((unsigned char *) user_key_2[i], (unsigned char *) round_key_2[i]);
 
-            UNROLL_LOOP
+            AES_ECB_encrypt1(in, hash_out, round_key_1, 0);
+            AES_ECB_encrypt1(in, hash_out, round_key_2, 1);
+
+            //UNROLL_LOOP
+            /*
             for (size_t i = 0; i < 4; ++i)
                 AES_ECB_encrypt((unsigned char *) &in[i],
                 (unsigned char *) hash_out[i],
                 sizeof(block),
                 (char *) round_key_1[i],
-                14);
-            
-            UNROLL_LOOP
+                14);*/
+
+            //UNROLL_LOOP
+            /*
             for (size_t i = 0; i < 4; ++i)
                 AES_ECB_encrypt((unsigned char *) &in[i],
                 (unsigned char *) hash_out[i] + 1,
                 sizeof(block),
                 (char *) round_key_2[i],
                 14);
+            */
         }
 
         for (size_t i = 0; i < 4; ++i) {   
