@@ -19,7 +19,7 @@ extern "C" {
 #endif
     void cppFunction();
     void ccr_aes_ctx_cpp(const uint8_t* in, uint8_t* out, unsigned int seclvl, unsigned int tweak);
-    void ccr_aes_ctx_cpp_batched(uint8_t tin[4][SECLVL / 8], uint8_t tout[4][SECLVL / 8], unsigned int seclvl, unsigned int tweak);
+    void ccr_aes_ctx_cpp_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak);
 #ifdef __cplusplus
 }
 #endif
@@ -790,7 +790,7 @@ void ccr_aes_ctx(const uint8_t* in, uint8_t* out, unsigned int seclvl, unsigned 
   ccr_aes_ctx_cpp(in, out, seclvl, tweak);
 }
 
-void ccr_aes_ctx_batched(uint8_t tin[4][SECLVL/8], uint8_t tout[4][SECLVL/8], unsigned int seclvl, unsigned int tweak) {
+void ccr_aes_ctx_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak) {
   ccr_aes_ctx_cpp_batched(tin, tout, seclvl, tweak);
 }
 

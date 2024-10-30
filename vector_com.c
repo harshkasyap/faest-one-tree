@@ -639,7 +639,50 @@ void batch_vector_commit(
 		memcpy(&tree[2 * i + 2], xor_buf, sizeof(block_secpar));
 	}
 
+	// Single contiguous memory block
+	//uint8_t* tin = (uint8_t*) aligned_alloc(32, TREE_CHUNK_SIZE * bytes * sizeof(uint8_t));
+	//uint8_t* tout = (uint8_t*) aligned_alloc(32, TREE_CHUNK_SIZE * bytes * sizeof(uint8_t));
+	//uint8_t* txor_buf = (uint8_t*) aligned_alloc(32, TREE_CHUNK_SIZE * bytes * sizeof(uint8_t));
 
+	uint8_t* tin = (uint8_t*)malloc(TREE_CHUNK_SIZE * bytes);
+	uint8_t* tout = (uint8_t*)malloc(TREE_CHUNK_SIZE * bytes);
+	uint8_t* txor_buf = (uint8_t*)malloc(TREE_CHUNK_SIZE * bytes);
+
+	next_to_expand_from = 3;
+	next_to_expand_to = 7;
+	while (next_to_expand_to < BATCH_VECTOR_COMMIT_NODES - TREE_CHUNK_SIZE)
+	{	
+		//#pragma omp parallel for schedule(static)
+		for (size_t j = 0; j < TREE_CHUNK_SIZE; ++j) {
+			memcpy(&tin[j * bytes], &tree[next_to_expand_from + j], sizeof(block_secpar));
+		}
+
+		ccr_aes_ctx_batched(tin, tout, lambda, 0);
+		
+		//#pragma omp parallel for schedule(static)
+		for (size_t j = 0; j < TREE_CHUNK_SIZE; ++j) {
+			// Store result and perform XOR operation
+			memcpy(&tree[2 * (next_to_expand_from + j) + 1], &tout[j * bytes], sizeof(block_secpar));
+			
+			//xor_u8_array(tin[j], tout[j], txor_buf[j], bytes);
+
+			// Using SIMD XOR here if available (use an intrinsic or optimized xor function)
+			//#pragma omp simd
+			for (size_t k = 0; k < bytes; ++k) {
+				txor_buf[j * bytes + k] = tin[j * bytes + k] ^ tout[j * bytes + k];
+			}
+
+			memcpy(&tree[2 * (next_to_expand_from + j) + 2], &txor_buf[j * bytes], sizeof(block_secpar));
+		}
+		next_to_expand_from += TREE_CHUNK_SIZE;
+		next_to_expand_to += 2*TREE_CHUNK_SIZE;
+	}
+	free(tin);
+	free(tout);
+	free(txor_buf);
+
+
+	/*
 	uint8_t tin[TREE_CHUNK_SIZE][SECLVL/8] = {{0}};
 	uint8_t tout[TREE_CHUNK_SIZE][SECLVL/8] = {{0}};
 	uint8_t txor_buf[TREE_CHUNK_SIZE][SECLVL/8] = {{0}};
@@ -673,6 +716,7 @@ void batch_vector_commit(
 		next_to_expand_from += TREE_CHUNK_SIZE;
 		next_to_expand_to += 2*TREE_CHUNK_SIZE;
 	}
+	*/
 
 	printf("Time taken to gen tree: %f seconds\n", (double)(clock() - start_time) / CLOCKS_PER_SEC);
 
@@ -687,10 +731,20 @@ void batch_vector_commit(
 	}
 
 	// Setup buffers for batched commit operation
-	uint8_t cin[LEAF_CHUNK_SIZE][SECLVL/8] = {{0}};	
-	uint8_t cseed_array1[LEAF_CHUNK_SIZE][SECLVL/8] = {{0}};
-	uint8_t cout_array1[LEAF_CHUNK_SIZE][SECLVL/8] = {{0}};
-	uint8_t cout_array2[LEAF_CHUNK_SIZE][SECLVL/8] = {{0}};
+	//uint8_t cin[LEAF_CHUNK_SIZE][SECLVL/8] = {{0}};	
+	//uint8_t cseed_array1[LEAF_CHUNK_SIZE][SECLVL/8] = {{0}};
+	//uint8_t cout_array1[LEAF_CHUNK_SIZE][SECLVL/8] = {{0}};
+	//uint8_t cout_array2[LEAF_CHUNK_SIZE][SECLVL/8] = {{0}};
+
+	//uint8_t* cin = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * sizeof(uint8_t));
+	//uint8_t* cseed_array1 = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * sizeof(uint8_t));
+	//uint8_t* cout_array1 = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * sizeof(uint8_t));
+	//uint8_t* cout_array2 = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * sizeof(uint8_t));
+
+	uint8_t* cin = (uint8_t*)malloc(LEAF_CHUNK_SIZE * bytes);
+	uint8_t* cseed_array1 = (uint8_t*)malloc(LEAF_CHUNK_SIZE * bytes);
+	uint8_t* cout_array1 = (uint8_t*)malloc(LEAF_CHUNK_SIZE * bytes);
+	uint8_t* cout_array2 = (uint8_t*)malloc(LEAF_CHUNK_SIZE * bytes);
 
 	uint8_t* cseed_array = (uint8_t*)malloc(BATCH_VECTOR_COMMIT_LEAVES * bytes);
 	uint8_t* cout_array = (uint8_t*)malloc(BATCH_VECTOR_COMMIT_LEAVES * bytes * 2);
@@ -699,7 +753,8 @@ void batch_vector_commit(
 		// Populate `cin` for current batch
 		//#pragma omp parallel for schedule(static)
 		for (size_t j = 0; j < LEAF_CHUNK_SIZE; ++j) {
-			memcpy(cin[j], &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + j], sizeof(block_secpar));
+			//memcpy(cin[j], &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + j], sizeof(block_secpar));
+			memcpy(&cin[j * bytes], &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + j], sizeof(block_secpar));
 		}
 		
 		ccr_aes_ctx_batched(cin, cseed_array1, lambda, 0);
@@ -708,11 +763,15 @@ void batch_vector_commit(
 
 		//#pragma omp parallel for schedule(static)
 		for (size_t j = 0; j < LEAF_CHUNK_SIZE; ++j) {
-			memcpy(cseed_array + (i + j) * bytes, cseed_array1[j], SECLVL / 8);
-			memcpy(cout_array + (i + j) * bytes * 2, cout_array1[j], SECLVL / 8);
-			memcpy(cout_array + (i + j) * bytes * 2 + bytes , cout_array2[j], SECLVL / 8);
+			memcpy(cseed_array + (i + j) * bytes, &cseed_array1[j * bytes], SECLVL / 8);
+			memcpy(cout_array + (i + j) * bytes * 2, &cout_array1[j * bytes], SECLVL / 8);
+			memcpy(cout_array + (i + j) * bytes * 2 + bytes , &cout_array2[j * bytes], SECLVL / 8);
 		}
 	}
+	free(cin);
+	free(cseed_array1);
+	free(cout_array1);
+	free(cout_array2);
 
 	// Write seeds and commitments to output
 	for (size_t vec_index = 0; vec_index < BITS_PER_WITNESS; vec_index++) {
@@ -723,7 +782,7 @@ void batch_vector_commit(
 
 			
 			memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], 
-			cseed_array + (BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) * bytes,sizeof(block_secpar));
+			cseed_array + (BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) * bytes, sizeof(block_secpar));
 		}
 	}
 	free(cseed_array);

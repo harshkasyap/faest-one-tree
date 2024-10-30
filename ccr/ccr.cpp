@@ -6,8 +6,6 @@ using namespace std;
 using namespace emp;
 #include <chrono>
 
-#define SECLVL 256
-
 // Define STRINGIZE to convert macro expressions into strings for _Pragma usage
 #ifdef __GNUC__
     #define STRINGIZE(x) #x
@@ -162,6 +160,142 @@ extern "C" {
         }
     }
 
+    void ccr_aes_ctx_cpp_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak) {
+        block hash_in [4][2];
+        block hash_out [4][2];
+        block user_key_1 [4][2];
+        block user_key_2 [4][2];
+        block round_key_1 [4][15];
+        block round_key_2 [4][15];
+        block in[4];
+        
+        size_t outlen = seclvl / 8;
+
+        for (size_t i = 0; i < 4; ++i) {
+            if (seclvl == 128) {
+                memcpy(&hash_in[i][0], &tin[i * outlen], 16);
+            } else if (seclvl == 192 || seclvl == 256) {
+                size_t right_size = (seclvl == 192) ? 8 : 16; // size for right part
+                memcpy(&hash_in[i][0], &tin[i * outlen], 16);
+                memcpy(&hash_in[i][1], &tin[i * outlen] + 16, right_size);
+
+                //dummy init
+                memcpy(&hash_out[i][0], &tin[i * outlen], 16);
+                memcpy(&hash_out[i][1], &tin[i * outlen] + 16, right_size);
+
+                memset(user_key_1[i], 0, sizeof(user_key_1[i]));
+                memset(user_key_2[i], 1, sizeof(user_key_2[i]));                    
+
+                user_key_1[i][1] = hash_in[i][1];
+                user_key_2[i][1] = hash_in[i][1];
+            }
+
+            in[i] = sigma(hash_in[i][0]);
+
+            if (tweak == 1) {
+                in[i][0] ^= 1; //tweaked
+            }
+
+            if (tweak == 2) {
+                in[i][0] ^= 2; //tweaked
+            }
+        }
+
+        if (seclvl == 128) {
+            const block zero_block = makeBlock(0, 0);
+    
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_128_Key_Expansion((unsigned char *) &zero_block, (unsigned char *) round_key_1[i]);
+
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_ECB_encrypt((unsigned char *) &in[i],
+                (unsigned char *) hash_out[i],
+                sizeof(block),
+                (const char *) round_key_1[i],
+                10);
+        }
+
+        if (seclvl == 192) {
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_192_Key_Expansion((unsigned char *) user_key_1[i], (unsigned char *) round_key_1[i]);
+
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_192_Key_Expansion((unsigned char *) user_key_2[i], (unsigned char *) round_key_2[i]);
+            
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                memcpy(user_key_2[i], user_key_1[i], sizeof(user_key_1[i]));
+
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_ECB_encrypt((unsigned char *) &in[i],
+                (unsigned char *) hash_out[i],
+                sizeof(block),
+                (char *) round_key_1[i],
+                12);
+            
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_ECB_encrypt((unsigned char *) &in[i],
+                (unsigned char *) hash_out[i] + 1,
+                sizeof(block),
+                (char *) round_key_2[i],
+                12);
+        }
+
+        if (seclvl == 256) {
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_256_Key_Expansion((unsigned char *) user_key_1[i], (unsigned char *) round_key_1[i]);
+
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_256_Key_Expansion((unsigned char *) user_key_2[i], (unsigned char *) round_key_2[i]);
+
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_ECB_encrypt((unsigned char *) &in[i],
+                (unsigned char *) hash_out[i],
+                sizeof(block),
+                (char *) round_key_1[i],
+                14);
+            
+            UNROLL_LOOP
+            for (size_t i = 0; i < 4; ++i)
+                AES_ECB_encrypt((unsigned char *) &in[i],
+                (unsigned char *) hash_out[i] + 1,
+                sizeof(block),
+                (char *) round_key_2[i],
+                14);
+        }
+
+        for (size_t i = 0; i < 4; ++i) {   
+            // Output results
+            
+            if (seclvl == 128) {
+                hash_out[i][0] = in[i] ^ hash_out[i][0];
+                memcpy(&tout[i * outlen], &hash_out[i][0], 16);
+            } else if (seclvl == 192) {
+                hash_out[i][0] = in[i] ^ hash_out[i][0];
+                hash_out[i][1] = in[i] ^ hash_out[i][1];
+
+                memcpy(&tout[i * outlen], &hash_out[i][0], 16);
+                memcpy(&tout[i * outlen] + 16, &hash_out[i][1], 8);
+            } else if (seclvl == 256) {
+                hash_out[i][0] = in[i] ^ hash_out[i][0];
+                hash_out[i][1] = in[i] ^ hash_out[i][1];
+
+                memcpy(&tout[i * outlen], &hash_out[i][0], 16);
+                memcpy(&tout[i * outlen] + 16, &hash_out[i][1], 16);
+            }
+        }
+    }
+
+    /*
     void ccr_aes_ctx_cpp_batched(uint8_t tin[4][SECLVL/8], uint8_t tout[4][SECLVL/8], unsigned int seclvl, unsigned int tweak) {
         block hash_in [4][2];
         block hash_out [4][2];
@@ -292,7 +426,7 @@ extern "C" {
                 memcpy(tout[i] + 16, &hash_out[i][1], 16);
             }
         }
-    }
+    }*/
 
     /*
     void ccr_aes_ctx_cpp_batched(uint8_t tin[4][SECLVL/8], uint8_t tout[4][SECLVL/8], unsigned int seclvl) {

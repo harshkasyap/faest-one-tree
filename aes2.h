@@ -15,8 +15,6 @@
 #include <immintrin.h>
 #include <wmmintrin.h>
 
-#define SECLVL 256
-
 
 FAEST_BEGIN_C_DECL
 
@@ -112,7 +110,7 @@ void ccr_with_ctx(union CCR_CTX* ctx, const uint8_t* in, uint8_t* out, size_t ou
 void ccr_aes_ctx(const uint8_t* in, uint8_t* out, unsigned int seclvl, unsigned int tweak);
 
 //void ccr_aes_ctx_batched(const uint8_t tin[4][32], uint8_t tout[4][32], unsigned int seclvl);
-void ccr_aes_ctx_batched(uint8_t tin[4][SECLVL/8], uint8_t tout[4][SECLVL/8], unsigned int lambda, unsigned int tweak);
+void ccr_aes_ctx_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak);
 
 
 void ccr_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* in, uint8_t* out, size_t outlen);
