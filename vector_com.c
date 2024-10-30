@@ -63,6 +63,7 @@ static ALWAYS_INLINE void expand_chunk(
 
 	size_t prg_block_size = !leaf ? sizeof(prg_tree_block) : sizeof(prg_leaf_block);
 	uint32_t blocks_per_key = (stretch * sizeof(block_secpar) + prg_block_size - 1) / prg_block_size;
+	//printf("blocks_per_key %zu", blocks_per_key);
 	size_t bytes_extra_per_key = blocks_per_key * prg_block_size - stretch * sizeof(block_secpar);
 
 	assert(blocks_per_key >= 2);
