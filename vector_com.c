@@ -4,15 +4,16 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include "aesp.h"
+//#include "aesp.h"
 #include "time.h"
 #include "prgs.h"
 #include "small_vole.h"
 #include "util.h"
 #include "hash.h"
 #include "stdio.h"
+#include "ccr.h"
 
-#define SECLVL 256
+#define SECLVL 128
 
 // TODO: probably can ditch most of the "restrict"s in inlined functions.
 
@@ -46,73 +47,95 @@ static ALWAYS_INLINE void expand_chunk(
 	const prg_leaf_fixed_key* restrict fixed_key_leaf,
 	const block_secpar* restrict input, block_secpar* restrict output)
 {
+	size_t bytes = SECLVL / 8;
+	int number_of_rounds = 10;
+	size_t right_size = 0;
+	size_t outlen = stretch * bytes;
+
+	if (bytes == 24) {
+		number_of_rounds = 12;
+		if (stretch == 3) {
+			outlen = 80;
+		}
+		right_size = 8;
+	}
+
+	if (bytes == 32) {
+		number_of_rounds = 14;
+		right_size = 16;
+	}
+
+	uint8_t* in = (uint8_t*)malloc(bytes);
+	uint8_t* in1 = (uint8_t*)malloc(16);
+	uint8_t* in2 = (uint8_t*)malloc(16);
+
+	uint8_t* out = (uint8_t*)malloc(16);
+	uint8_t* cout = (uint8_t*)malloc(stretch * bytes);
+
 	for (size_t i = 0; i < n; ++i)
 	{
-		
-		prg(input[i], iv, output[i], SECLVL, lambda_bytes * stretch);
+		block user_key;
+		block round_key [15];
+		memcpy(&user_key, &iv, sizeof(user_key));
+
+		memcpy(in, input + i, bytes);
+
+		for (size_t j = 0; j < stretch; ++j)
+		{
+			if (bytes == 16) {
+				AES_128_Key_Expansion((unsigned char *) &user_key, (unsigned char *) &round_key);
+				memcpy(in1, in, bytes);
+			}
+
+			if (bytes == 24) {
+				AES_192_Key_Expansion((unsigned char *) &user_key, (unsigned char *) &round_key);
+				memcpy(in1, in, 16);
+				memcpy(in2, in + 16, right_size);
+			}
+
+			if (bytes == 32) {
+				AES_256_Key_Expansion((unsigned char *) &user_key, (unsigned char *) &round_key);
+				memcpy(in1, in, 16);
+				memcpy(in2, in + 16, right_size);
+			}
+
+			AES_ECB_encrypt((unsigned char *) in1,
+				(unsigned char *) out,
+				16,
+				(const char *) round_key,
+				number_of_rounds);
+
+			memcpy(cout + (j * 16) + (j * right_size), out, 16);
+
+			if (bytes > 16) {
+				AES_ECB_encrypt((unsigned char *) in2,
+				(unsigned char *) out,
+				16,
+				(const char *) round_key,
+				number_of_rounds);
+
+				memcpy(cout + (j * 16) + (j * right_size) + 16, out, right_size);
+			}
+		}
+
+
+		if (stretch == 2) {
+			printf("\n****###****##@@@cin");
+			for (size_t i = 0; i < 64; ++i) {
+				printf("%02x ", in1[i]);
+			}
+
+			printf("\n****###****##@@@cout");
+			for (size_t i = 0; i < 64; ++i) {
+				printf("%02x ", cout[i]);
+			}
+		}
+
+		memcpy(output + (i * stretch), cout, stretch * bytes);
 	}
+	free(in);
+	free(out);
 }
-
-/*
-static ALWAYS_INLINE void expand_chunk(
-	bool leaf, size_t n, uint32_t stretch, block128 iv,
-	const prg_tree_fixed_key* restrict fixed_key_tree,
-	const prg_leaf_fixed_key* restrict fixed_key_leaf,
-	const block_secpar* restrict input, block_secpar* restrict output)
-{
-	assert(n <= (!leaf ? TREE_CHUNK_SIZE : LEAF_CHUNK_SIZE));
-
-	block_secpar keys[MAX_CHUNK_SIZE];
-	prg_tree_iv ivs_tree[TREE_CHUNK_SIZE];
-	prg_leaf_iv ivs_leaf[LEAF_CHUNK_SIZE];
-	prg_tree_key prgs_tree[TREE_CHUNK_SIZE];
-	prg_leaf_key prgs_leaf[LEAF_CHUNK_SIZE];
-	prg_tree_block prg_output_tree[TREE_CHUNK_SIZE * 3];
-	prg_leaf_block prg_output_leaf[LEAF_CHUNK_SIZE * 3];
-
-	memcpy(&keys[0], input, n * sizeof(block_secpar));
-
-	for (size_t i = 0; i < n; ++i)
-	{
-		memcpy(&ivs_tree[i], &iv, sizeof(ivs_tree[i]));
-		memcpy(&ivs_leaf[i], &iv, sizeof(ivs_leaf[i]));
-	}
-
-	size_t prg_block_size = !leaf ? sizeof(prg_tree_block) : sizeof(prg_leaf_block);
-	uint32_t blocks_per_key = (stretch * sizeof(block_secpar) + prg_block_size - 1) / prg_block_size;
-	size_t bytes_extra_per_key = blocks_per_key * prg_block_size - stretch * sizeof(block_secpar);
-
-	assert(blocks_per_key >= 2);
-	uint32_t num_blocks = blocks_per_key % 2 ? 3 : 2;
-	if (!leaf)
-		prg_tree_init(&prgs_tree[0], fixed_key_tree, &keys[0], &ivs_tree[0],
-		              n, num_blocks, 0, &prg_output_tree[0]);
-	else
-		prg_leaf_init(&prgs_leaf[0], fixed_key_leaf, &keys[0], &ivs_leaf[0],
-		              n, num_blocks, 0, &prg_output_leaf[0]);
-
-	assert(blocks_per_key > num_blocks || bytes_extra_per_key == 0);
-	copy_prg_output(leaf, n, stretch, 0, num_blocks, num_blocks * prg_block_size,
-	                prg_output_tree, prg_output_leaf, output);
-
-	for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
-	{
-		num_blocks = 2;
-		if (!leaf)
-			prg_tree_gen(&prgs_tree[0], fixed_key_tree, n, num_blocks, j, &prg_output_tree[0]);
-		else
-			prg_leaf_gen(&prgs_leaf[0], fixed_key_leaf, n, num_blocks, j, &prg_output_leaf[0]);
-
-		if (j + num_blocks < blocks_per_key || bytes_extra_per_key == 0)
-			copy_prg_output(leaf, n, stretch, j, num_blocks, num_blocks * prg_block_size,
-			                prg_output_tree, prg_output_leaf, output);
-		else
-			copy_prg_output(leaf, n, stretch, j, num_blocks,
-			                num_blocks * prg_block_size - bytes_extra_per_key,
-			                prg_output_tree, prg_output_leaf, output);
-
-	}
-}*/
 
 // Allow n to be hardcoded by the compiler into expand_chunk:
 #define DEF_EXPAND_CHUNK_N(n) \
@@ -603,9 +626,12 @@ void batch_vector_commit(
 	size_t chunck_size = 1;
 	while (chunck_size < TREE_CHUNK_SIZE)
 	{
+		clock_t prg_time = clock();
 		expand_chunk_switch(chunck_size, iv, &fixed_key_tree, &tree[ next_to_expand_from ], &tree[next_to_expand_to]);
+		printf("Time taken to prg call: %f seconds\n", (double)(clock() - start_time) / CLOCKS_PER_SEC);
+
 		next_to_expand_from += chunck_size;
-		next_to_expand_to += 2*chunck_size;
+		next_to_expand_to += 2 * chunck_size;
 		chunck_size *= 2;
 		//printf("\n to, from, cs %zu %zu %zu", next_to_expand_from, next_to_expand_to, chunck_size);
 	}
@@ -618,6 +644,7 @@ void batch_vector_commit(
 		next_to_expand_to += 2*TREE_CHUNK_SIZE;
 		//printf("\n to, from, cs %zu %zu %zu", next_to_expand_from, next_to_expand_to, chunck_size);
 	}
+
 	size_t to_do = ( BATCH_VECTOR_COMMIT_NODES - next_to_expand_to ) > TREE_CHUNK_SIZE ? TREE_CHUNK_SIZE :  ( BATCH_VECTOR_COMMIT_NODES - next_to_expand_to ) ;
 	if (to_do)
 	{
@@ -644,12 +671,8 @@ void batch_vector_commit(
 	{
 		for (size_t leaf_index = 0; leaf_index < BATCH_VEC_LEN(vec_index); leaf_index++)
 		{
-			//printf("\n 3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) %zu", 3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1));
 			leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)] = prg_output[3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1)];
 			memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), prg_output + 3*(BATCH_VEC_POS_IN_TREE(vec_index, leaf_index) - BATCH_VECTOR_COMMIT_LEAVES + 1) + 1, sizeof(block_2secpar));
-
-			//memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index)], cseed, sizeof(block_secpar));
-			//memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), c2seed, sizeof(block_2secpar));
 		}
 	}
 	free(prg_output);
@@ -729,7 +752,9 @@ bool force_vector_open(const block_secpar* restrict forest, const block_2secpar*
 			vector_open(forest, hashed_leaves, delta_bytes, opening);
 			bool b = true;
 #else
+			//clock_t open_time = clock(); 
 			bool b = batch_vector_open(forest, hashed_leaves, delta_bytes, opening);
+			//printf("Time taken to batch open: %f seconds\n", (double)(clock() - open_time) / CLOCKS_PER_SEC);
 #endif
 
 			if (b) {
@@ -901,10 +926,7 @@ bool batch_vector_verify(
 		{
 			size_t pos = BATCH_VEC_POS_IN_TREE(vec_index, leaf_index);
 			if(dont_reveal[pos] == 0)
-				//write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
 				write_leaf(iv, &fixed_key_leaf, tree + pos , leaves + BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index]), hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index));
-				//memcpy(&leaves[BATCH_VEC_LEAF_POS_IN_OUTPUT(vec_index, leaf_index ^ delta_parsed[vec_index])], cseed, sizeof(block_secpar));
-				//memcpy(hashed_leaves + BATCH_VEC_HASH_POS_IN_OUTPUT(vec_index, leaf_index), c2seed, sizeof(block_2secpar));				
 		}
 	}
 end:

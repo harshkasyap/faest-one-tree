@@ -11,6 +11,7 @@
 #include "vole_commit.h"
 #include "util.h"
 #include "stdio.h"
+#include "time.h"
 
 void faest_free_public_key(public_key* pk)
 {
@@ -366,7 +367,12 @@ static bool faest_sign_attempt(
 	memcpy(hash_prefix, &chal2, sizeof(chal2));
 	memcpy(hash_prefix + sizeof(chal2), qs_proof, QUICKSILVER_PROOF_BYTES);
 	memcpy(hash_prefix + sizeof(chal2) + QUICKSILVER_PROOF_BYTES, qs_check, QUICKSILVER_CHECK_BYTES);
+	
+	clock_t open_time = clock(); 
 	bool open_success = force_vector_open(forest, hashed_leaves, delta, veccom_open_start, hash_prefix, sizeof(chal2) + QUICKSILVER_PROOF_BYTES + QUICKSILVER_CHECK_BYTES, &counter);
+	printf("Time taken to batch open: %f seconds\n", (double)(clock() - open_time) / CLOCKS_PER_SEC);
+	
+
 #endif
 
 	free(forest);
