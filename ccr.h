@@ -18,6 +18,7 @@ void AES_ECB_encrypt2(block *in, // pointer to the PLAINTEXT
 						  block key [8][15], int number_of_rounds);
 void AES_256_Key_Expansion2(block userkey [8][2], block key [8][15]);
 void ccr_aes_ctx_cpp_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak);
+void ccr_aes_ctx_cpp_all_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl);
 void ccr_aes_ctx_cpp(const uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak);
 
 void AES_128_Key_Expansion(const unsigned char *userkey, unsigned char *key);

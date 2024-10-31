@@ -112,6 +112,7 @@ void ccr_aes_ctx(const uint8_t* in, uint8_t* out, unsigned int seclvl, unsigned 
 //void ccr_aes_ctx_batched(const uint8_t tin[4][32], uint8_t tout[4][32], unsigned int seclvl);
 void ccr_aes_ctx_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak);
 
+void ccr_aes_ctx_all_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl);
 
 void ccr_without_ctx(unsigned int seclvl, const uint8_t* iv, const uint8_t* in, uint8_t* out, size_t outlen);
 
