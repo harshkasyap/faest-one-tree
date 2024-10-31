@@ -630,7 +630,10 @@ void batch_vector_commit(
 	//Gen First two layer Nodes
 	for (size_t i = 1 ; i < 3; i++) {
 		memcpy(in, &tree[i], sizeof(block_secpar));
+		
+		clock_t aes_ccr_time = clock();	
 		ccr_aes_ctx(in, out, lambda, 0);
+		printf("Time taken to aes ccr call: %f seconds\n", (double)(clock() - aes_ccr_time) / CLOCKS_PER_SEC);
 
 		memcpy(&tree[2 * i + 1], out, sizeof(block_secpar));
 
@@ -650,7 +653,7 @@ void batch_vector_commit(
 
 	next_to_expand_from = 3;
 	next_to_expand_to = 7;
-	clock_t test_time = clock();	
+	//clock_t test_time = clock();	
 	while (next_to_expand_to < BATCH_VECTOR_COMMIT_NODES - TREE_CHUNK_SIZE)
 	{	
 		//#pragma omp parallel for schedule(static)
@@ -681,7 +684,7 @@ void batch_vector_commit(
 	free(tin);
 	free(tout);
 	free(txor_buf);
-	printf("Time taken to test tree: %f seconds\n", (double)(clock() - test_time) / CLOCKS_PER_SEC);
+	//printf("Time taken to test tree: %f seconds\n", (double)(clock() - test_time) / CLOCKS_PER_SEC);
 
 	/*
 	uint8_t tin[TREE_CHUNK_SIZE][SECLVL/8] = {{0}};

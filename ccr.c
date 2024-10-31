@@ -102,16 +102,9 @@
         block round_key_1 [15];
         block round_key_2 [15];
         block in = sigma(hash_in[0]);
+        in[0] ^= (tweak == 1) ? 1 : (tweak == 2) ? 2 : 0;
 
-        if (tweak == 1) {
-            in[0] ^= 1; //tweaked
-        }
-
-        if (tweak == 2) {
-            in[0] ^= 2; //tweaked
-        }
-
-        if (seclvl == 192 || seclvl == 256) {
+        if (seclvl > 128) {
             memset(user_key_1, 0, sizeof(user_key_1));
             memset(user_key_2, 1, sizeof(user_key_2));                    
 
@@ -691,8 +684,42 @@
             Key_Schedule[p][14] = temp1[p];
         }
 	}
-
+    
     void ccr_aes_ctx_cpp_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak) {
+        size_t outlen = seclvl / 8;
+        for (size_t i = 0; i < 4; ++i) {
+                block hash_in [2];
+                block hash_out [2];
+
+                if (seclvl == 128) {
+                    memcpy(&hash_in[0], &tin[i * outlen], 16);
+                } else if (seclvl == 192 || seclvl == 256) {
+                    size_t right_size = (seclvl == 192) ? 8 : 16; // size for right part
+                    memcpy(&hash_in[0], &tin[i * outlen], 16);
+                    memcpy(&hash_in[1], &tin[i * outlen] + 16, right_size);
+
+                    //dummy init
+                    memcpy(&hash_out[0], &tin[i * outlen], 16);
+                    memcpy(&hash_out[1], &tin[i * outlen] + 16, right_size);
+                }
+
+                // Process the hash
+                process_hash(hash_in, seclvl, hash_out, tweak);
+
+                // Output results
+                if (seclvl == 128) {
+                    memcpy(&tout[i * outlen], &hash_out[0], 16);
+                } else if (seclvl == 192) {
+                    memcpy(&tout[i * outlen], &hash_out[0], 16);
+                    memcpy(&tout[i * outlen] + 16, &hash_out[1], 8);
+                } else if (seclvl == 256) {
+                    memcpy(&tout[i * outlen], &hash_out[0], 16);
+                    memcpy(&tout[i * outlen] + 16, &hash_out[1], 16);
+                }
+        }
+    }
+
+    /*void ccr_aes_ctx_cpp_batched(uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak) {
         alignas(16) block hash_in [4][2];
         alignas(16) block hash_out [4][2];
         alignas(16) block user_key_1 [4][2];
@@ -762,7 +789,7 @@
                 memcpy(&tout[i * outlen] + 16, &hash_out[i][1], (seclvl == 192) ? 8 : 16);
             }
         }
-    }
+    }*/
 
     /*
     void ccr_aes_ctx_cpp_batched(uint8_t tin[4][SECLVL/8], uint8_t tout[4][SECLVL/8], unsigned int seclvl, unsigned int tweak) {
