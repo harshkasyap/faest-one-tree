@@ -1,5 +1,6 @@
 #include "ccr.h"
 #include <time.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdalign.h>  // for alignas
@@ -27,7 +28,7 @@
         return _mm_shuffle_epi32(a, 78) ^ (a & makeBlock(0xFFFFFFFFFFFFFFFF, 0x00));
     }
 
-    void process_hash_batch(block *hash_in, unsigned int seclvl, block *hash_out, uint8_t* out1, uint8_t* out2) {
+    void process_hash_batch(block *hash_in, unsigned int seclvl, block *hash_out, block *hash_out1, block *hash_out2) {
         block user_key_1 [2];
         block user_key_2 [2];
         block round_key_1 [15];
@@ -78,34 +79,22 @@
             AES_256_Key_Expansion((unsigned char *) user_key_1, (unsigned char *) round_key_1);
             AES_256_Key_Expansion((unsigned char *) user_key_2, (unsigned char *) round_key_2);
 
-            uint8_t* inp = (uint8_t*)malloc(48);
-            memcpy(&inp, &in[0], 16);
-            memcpy(&inp + 16, &in[1], 16);
-            memcpy(&inp + 32, &in[2], 16);
-
-            AES_ECB_encrypt((unsigned char *) inp,
-            (unsigned char *) out1,
+            AES_ECB_encrypt((unsigned char *) in,
+            (unsigned char *) hash_out1,
             48,
             (char *) round_key_1,
             14);
 
-            AES_ECB_encrypt((unsigned char *) inp,
-            (unsigned char *) out2,
+            AES_ECB_encrypt((unsigned char *) in,
+            (unsigned char *) hash_out2,
             48,
             (char *) round_key_2,
             14);
 
-            //out1^= inp;
-            #pragma omp simd
-			for (size_t k = 0; k < 48; ++k) {
-				out1[k] = inp[k] ^ out1[k];
-			}
-
-            //out2^= inp;
-            #pragma omp simd
-			for (size_t k = 0; k < 48; ++k) {
-				out2[k] = inp[k] ^ out2[k];
-			}
+            for (size_t k = 0; k < 3; ++k) {
+                hash_out1[k]^=in[k];
+                hash_out2[k]^=in[k];
+            }
         }
     }
 
@@ -115,8 +104,8 @@
                 block hash_in [2];
                 block hash_out [2];
 
-                uint8_t* out1 = (uint8_t*)malloc(48);
-                uint8_t* out2 = (uint8_t*)malloc(48);
+                block hash_out1 [3];
+                block hash_out2 [3];
 
                 if (seclvl == 128) {
                     memcpy(&hash_in[0], &tin[i * outlen], 16);
@@ -125,13 +114,17 @@
                     memcpy(&hash_in[0], &tin[i * outlen], 16);
                     memcpy(&hash_in[1], &tin[i * outlen] + 16, right_size);
 
-                    //dummy init
-                    //memcpy(&hash_out[0], &tin[i * outlen], 16);
-                    //memcpy(&hash_out[1], &tin[i * outlen] + 16, right_size);
+                    memset(&hash_out1[0], 1, 16);
+                    memset(&hash_out1[1], 1, 16);
+                    memset(&hash_out1[2], 1, 16);
+
+                    memset(&hash_out2[0], 1, 16);
+                    memset(&hash_out2[1], 1, 16);
+                    memset(&hash_out2[2], 1, 16);
                 }
 
                 // Process the hash
-                process_hash_batch(hash_in, seclvl, hash_out, out1, out2);
+                process_hash_batch(hash_in, seclvl, hash_out, hash_out1, hash_out2);
 
                 // Output results
                 if (seclvl == 128) {
@@ -140,12 +133,16 @@
                     memcpy(&tout[i * outlen], &hash_out[0], 16);
                     memcpy(&tout[i * outlen] + 16, &hash_out[1], 8);
                 } else if (seclvl == 256) {
-                    /*memcpy(&tout[i * outlen * 3], &out1, 16);
-                    memcpy(&tout[i * outlen * 3] + 16, &out2, 16);
-                    memcpy(&tout[i * outlen * 3] + 32, &out1 + 16, 16);
-                    memcpy(&tout[i * outlen * 3] + 48, &out2 + 16, 16);
-                    memcpy(&tout[i * outlen * 3] + 64, &out1 + 32, 16);
-                    memcpy(&tout[i * outlen * 3] + 80, &out2 + 32, 16);*/
+                    //dummy init
+
+                    memcpy(&tout[i * outlen * 3], &hash_out1[0], 16);
+                    memcpy(&tout[i * outlen * 3] + 16, &hash_out2[0], 16);
+
+                    memcpy(&tout[i * outlen * 3] + 32, &hash_out1[1], 16);
+                    memcpy(&tout[i * outlen * 3] + 48, &hash_out2[1], 16);
+
+                    memcpy(&tout[i * outlen * 3] + 64, &hash_out1[2], 16);
+                    memcpy(&tout[i * outlen * 3] + 80, &hash_out2[2], 16);
                 }
         }
     }
@@ -352,7 +349,7 @@
 			length = length / 16 + 1;
 		else
 			length = length / 16;
-		
+
 		//UNROLL_LOOP
 		for (i = 0; i < length; i++)
 		{
@@ -769,6 +766,7 @@
                 } else if (seclvl == 256) {
                     memcpy(&tout[i * outlen], &hash_out[0], 16);
                     memcpy(&tout[i * outlen] + 16, &hash_out[1], 16);
+                    //memset(&tout[i * outlen], 1, 32);
                 }
         }
     }
@@ -846,6 +844,57 @@
         }
     }*/
 
+
+    void ccr_aes_ctx_all_batch(const uint8_t* tin, uint8_t* tout, uint8_t* tcmt, unsigned int seclvl) {
+        block hash_in [2];
+        block hash_out [2];
+
+        block hash_out1 [3];
+        block hash_out2 [3];
+
+        if (seclvl == 128) {
+            memcpy(&hash_in[0], tin, 16);
+        } else if (seclvl == 192 || seclvl == 256) {
+            size_t right_size = (seclvl == 192) ? 8 : 16; // size for right part
+            memcpy(&hash_in[0], tin, 16);
+            memcpy(&hash_in[1], tin + 16, right_size);
+
+            //dummy init
+            memcpy(&hash_out[0], tin, 16);
+            memcpy(&hash_out[1], tin + 16, right_size);
+
+            memset(&hash_out1[0], 1, 16);
+            memset(&hash_out1[1], 1, 16);
+            memset(&hash_out1[2], 1, 16);
+
+            memset(&hash_out2[0], 1, 16);
+            memset(&hash_out2[1], 1, 16);
+            memset(&hash_out2[2], 1, 16);
+        }
+
+        // Process the hash
+        process_hash_batch(hash_in, seclvl, hash_out, hash_out1, hash_out2);
+
+        // Output results
+        if (seclvl == 128) {
+            memcpy(tout, &hash_out[0], 16);
+        } else if (seclvl == 192) {
+            memcpy(tout, &hash_out[0], 16);
+            memcpy(tout + 16, &hash_out[1], 8);
+        } else if (seclvl == 256) {
+
+            memcpy(tout, &hash_out1[0], 16);
+            memcpy(tout + 16, &hash_out2[0], 16);
+
+            memcpy(tcmt, &hash_out1[1], 16);
+            memcpy(tcmt + 16, &hash_out2[1], 16);
+            memcpy(tcmt + 32, &hash_out1[1], 16);
+            memcpy(tcmt + 48, &hash_out2[2], 16);
+            //memset(&tout, 1, 32);
+            //memset(&tcmt, 1, 64);
+        }
+    }
+
     void ccr_aes_ctx_cpp(const uint8_t* tin, uint8_t* tout, unsigned int seclvl, unsigned int tweak) {
         block hash_in [2];
         block hash_out [2];
@@ -874,5 +923,6 @@
         } else if (seclvl == 256) {
             memcpy(tout, &hash_out[0], 16);
             memcpy(tout + 16, &hash_out[1], 16);
+            //memset(&tout, 1, 32);
         }
     }

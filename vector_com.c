@@ -14,7 +14,7 @@
 #include "aes2.h"
 #include "utils.h"
 
-#define SECLVL 256 //@to-do need to fetch it automatically
+#define SECLVL 192 //@to-do need to fetch it automatically
 
 //extern void ccr_aes_ctx(const uint8_t* in, const uint8_t* iv, uint8_t* out, unsigned int seclvl, size_t outlen);
 
@@ -655,30 +655,6 @@ void batch_vector_commit(
 	}
 
 	uint8_t* cin = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * sizeof(uint8_t));
-	uint8_t* cout = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * 3 * sizeof(uint8_t));
-	uint8_t* cseed_array = (uint8_t*)malloc(BATCH_VECTOR_COMMIT_LEAVES * bytes);
-	uint8_t* cout_array = (uint8_t*)malloc(BATCH_VECTOR_COMMIT_LEAVES * bytes * 2);
-
-	for (size_t i = 0; i < BATCH_VECTOR_COMMIT_LEAVES; i += LEAF_CHUNK_SIZE) {
-		#pragma omp parallel for schedule(static)
-		for (size_t j = 0; j < LEAF_CHUNK_SIZE; ++j) {
-			memcpy(&cin[j * bytes], &tree[BATCH_VECTOR_COMMIT_LEAVES - 1 + i + j], sizeof(block_secpar));
-		}
-
-		ccr_aes_ctx_all_batched(cin, cout, lambda);
-
-		#pragma omp parallel for schedule(static)
-		for (size_t j = 0; j < LEAF_CHUNK_SIZE; ++j) {
-			memcpy(cseed_array + (i + j) * bytes, &cout[j * bytes * 3], SECLVL / 8);
-			memcpy(cout_array + (i + j) * bytes * 2, &cout[j * bytes * 3 + bytes], SECLVL / 4);
-			//memcpy(cout_array + (i + j) * bytes * 2 + bytes , &cout[j * bytes * 3], SECLVL / 8);
-		}
-	}
-	free(cin);
-	free(cout);
-
-	/*
-	uint8_t* cin = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * sizeof(uint8_t));
 	uint8_t* cseed_array1 = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * sizeof(uint8_t));
 	uint8_t* cout_array1 = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * sizeof(uint8_t));
 	uint8_t* cout_array2 = (uint8_t*) aligned_alloc(32, LEAF_CHUNK_SIZE * bytes * sizeof(uint8_t));
@@ -707,7 +683,7 @@ void batch_vector_commit(
 	free(cseed_array1);
 	free(cout_array1);
 	free(cout_array2);
-	*/
+	
 
 	// Write seeds and commitments to output
 	for (size_t vec_index = 0; vec_index < BITS_PER_WITNESS; vec_index++) {

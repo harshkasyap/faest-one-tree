@@ -835,6 +835,11 @@ void ccr2_aes_ctx(unsigned int seclvl, const uint8_t* src, uint8_t* seed,
   ccr_aes_ctx(src, commitment+(seclvl/8), seclvl, 2);
 }
 
+/*
+void ccr2_aes_ctx(unsigned int seclvl, const uint8_t* src, uint8_t* seed, uint8_t* commitment) {
+  ccr_aes_ctx_all_batch(src, seed, commitment, seclvl);
+}*/
+
 void ccr2_x4(const uint8_t* src0, const uint8_t* src1, const uint8_t* src2, const uint8_t* src3,
              const uint8_t* iv,
              uint8_t* seed0, uint8_t* seed1, uint8_t* seed2, uint8_t* seed3, size_t seed_len,
