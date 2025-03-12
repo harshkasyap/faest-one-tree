@@ -207,8 +207,17 @@ ALWAYS_INLINE void aes_keygen_impl(
 	int round_end = AES_ROUNDS - 2;
 	int unroll_rounds = 2;
 #endif
-
+	// printf("comes here in keygen ctr");
 	// Separate out the first and last rounds, as they work differently.
+
+	block128 sigma_output[3 * AES_PREFERRED_WIDTH];
+
+	for (size_t i = 0; i < num_keys * num_blocks; ++i)
+	{
+		sigma_output[i] = sigma(output[i]);
+		output[i] = sigma(output[i]);
+	}
+
 	aes_round(aeses, output, num_keys, num_blocks, 0);
 	if (round_start > 1)
 		aes_round(aeses, output, num_keys, num_blocks, 1);
@@ -242,6 +251,11 @@ ALWAYS_INLINE void aes_keygen_impl(
 	{
 		aes_keygen_round(keygen_states, aeses, num_keys, round_end + 2);
 		aes_round(aeses, output, num_keys, num_blocks, round_end + 2);
+	}
+
+	for (size_t i = 0; i < num_keys * num_blocks; ++i)
+	{
+		output[i] = output[i] ^ sigma_output[i];
 	}
 }
 

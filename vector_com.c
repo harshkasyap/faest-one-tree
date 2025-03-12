@@ -61,13 +61,19 @@ static ALWAYS_INLINE void expand_chunk(
 		memcpy(&ivs_leaf[i], &iv, sizeof(ivs_leaf[i]));
 	}
 
+	//printf("tree block size leaf block size %zu %zu", sizeof(prg_tree_block), sizeof(prg_leaf_block));
+
 	size_t prg_block_size = !leaf ? sizeof(prg_tree_block) : sizeof(prg_leaf_block);
+	
+	//printf("stretch, block_secpar, prg_block_size %zu %zu %zu", stretch, sizeof(block_secpar), prg_block_size);
 	uint32_t blocks_per_key = (stretch * sizeof(block_secpar) + prg_block_size - 1) / prg_block_size;
 	//printf("blocks_per_key %zu", blocks_per_key);
 	size_t bytes_extra_per_key = blocks_per_key * prg_block_size - stretch * sizeof(block_secpar);
 
 	assert(blocks_per_key >= 2);
 	uint32_t num_blocks = blocks_per_key % 2 ? 3 : 2;
+	// printf("no of keys, blocks per key, Num of blocks %zu %zu %zu", n, blocks_per_key, num_blocks);
+
 	if (!leaf)
 		prg_tree_init(&prgs_tree[0], fixed_key_tree, &keys[0], &ivs_tree[0],
 		              n, num_blocks, 0, &prg_output_tree[0]);

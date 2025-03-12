@@ -35,19 +35,29 @@ inline void aes_round_function(
 	*block = state;
 }
 
+inline block128 makeBlock(uint64_t high, uint64_t low) {
+	return _mm_set_epi64x(high, low);
+}
+
+inline block128 sigma(block128 a) {
+	return _mm_shuffle_epi32(a, 78) ^ (a & makeBlock(0xFFFFFFFFFFFFFFFF, 0x00));
+}
+
+
 ALWAYS_INLINE void aes_round(
 	const aes_round_keys* aeses, block128* state, size_t num_keys, size_t evals_per_key, int round)
 {
 	#ifdef __GNUC__
 	_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH)))
 	#endif
-	for (size_t i = 0; i < num_keys * evals_per_key; ++i)
+	for (size_t i = 0; i < num_keys * evals_per_key; ++i) {
 		if (round == 0)
 			state[i] = block128_xor(state[i], aeses[i / evals_per_key].keys[round]);
 		else if (round < AES_ROUNDS)
 			state[i] = _mm_aesenc_si128(state[i], aeses[i / evals_per_key].keys[round]);
 		else
 			state[i] = _mm_aesenclast_si128(state[i], aeses[i / evals_per_key].keys[round]);
+	}	
 }
 
 // This implements the rijndael256 RotateRows step, then cancels out the RotateRows of AES so
@@ -164,7 +174,8 @@ ALWAYS_INLINE void aes_keygen_ctr(
 			bad_iv = true;
 
 	if (bad_iv)
-	{
+	{   
+		//printf("does not come here");
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
@@ -174,6 +185,7 @@ ALWAYS_INLINE void aes_keygen_ctr(
 	}
 	else
 	{
+		//printf("it comes here");
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
@@ -233,9 +245,13 @@ inline void aes_ctr(
 	const aes_round_keys* restrict aeses,
 	size_t num_keys, uint32_t num_blocks, uint32_t counter, block128* restrict output)
 {
+
+	// printf("Num of blocks %zu", num_blocks);
 	// Upper bound just to avoid VLAs.
 	assert(num_keys * num_blocks <= 3 * AES_PREFERRED_WIDTH);
 	block128 state[3 * AES_PREFERRED_WIDTH];
+	
+	//block128 sigma_state[3 * AES_PREFERRED_WIDTH];
 
 	uint64_t counter64 = counter;
 	uint64_t counter_max = counter64 + num_blocks;
@@ -250,6 +266,7 @@ inline void aes_ctr(
 
 	if (bad_iv)
 	{
+		//printf("does not come here");
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
@@ -259,6 +276,7 @@ inline void aes_ctr(
 	}
 	else
 	{
+		//printf("it comes here");
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
@@ -267,12 +285,25 @@ inline void aes_ctr(
 				state[l * num_blocks + m] = aes_add_counter_to_iv_good(aeses[l].iv, counter64 + m);
 	}
 
+	/*
+	for (size_t i = 0; i < num_keys * num_blocks; ++i)
+	{
+		sigma_state[i] = sigma(state[i]);
+		state[i] = sigma(state[i]);
+	}*/
+
 	// Make it easier for the compiler to optimize by unwinding the first and last rounds. (Since we
 	// aren't asking it to unwind the whole loop.)
 	aes_round(aeses, state, num_keys, num_blocks, 0);
 	for (int round = 1; round < AES_ROUNDS; ++round)
 		aes_round(aeses, state, num_keys, num_blocks, round);
 	aes_round(aeses, state, num_keys, num_blocks, AES_ROUNDS);
+
+	/*
+	for (size_t i = 0; i < num_keys * num_blocks; ++i)
+	{
+		state[i] = state[i] ^ sigma_state[i];
+	}*/
 
 	memcpy(output, state, num_keys * num_blocks * sizeof(block128));
 }
