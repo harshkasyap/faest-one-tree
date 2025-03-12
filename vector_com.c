@@ -11,6 +11,7 @@
 #include "hash.h"
 #include "stdio.h"
 
+#include <immintrin.h> 
 // TODO: probably can ditch most of the "restrict"s in inlined functions.
 
 #define TREE_CHUNK_SIZE (PRG_TREE_PREFERRED_WIDTH / 2)
@@ -61,13 +62,19 @@ static ALWAYS_INLINE void expand_chunk(
 		memcpy(&ivs_leaf[i], &iv, sizeof(ivs_leaf[i]));
 	}
 
+	//printf("tree block size leaf block size %zu %zu", sizeof(prg_tree_block), sizeof(prg_leaf_block));
+
 	size_t prg_block_size = !leaf ? sizeof(prg_tree_block) : sizeof(prg_leaf_block);
+	
+	//printf("stretch, block_secpar, prg_block_size %zu %zu %zu", stretch, sizeof(block_secpar), prg_block_size);
 	uint32_t blocks_per_key = (stretch * sizeof(block_secpar) + prg_block_size - 1) / prg_block_size;
 	//printf("blocks_per_key %zu", blocks_per_key);
 	size_t bytes_extra_per_key = blocks_per_key * prg_block_size - stretch * sizeof(block_secpar);
 
 	assert(blocks_per_key >= 2);
 	uint32_t num_blocks = blocks_per_key % 2 ? 3 : 2;
+	// printf("no of keys, blocks per key, Num of blocks %zu %zu %zu", n, blocks_per_key, num_blocks);
+
 	if (!leaf)
 		prg_tree_init(&prgs_tree[0], fixed_key_tree, &keys[0], &ivs_tree[0],
 		              n, num_blocks, 0, &prg_output_tree[0]);
@@ -79,22 +86,110 @@ static ALWAYS_INLINE void expand_chunk(
 	copy_prg_output(leaf, n, stretch, 0, num_blocks, num_blocks * prg_block_size,
 	                prg_output_tree, prg_output_leaf, output);
 
-	for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
-	{
-		num_blocks = 2;
-		if (!leaf)
-			prg_tree_gen(&prgs_tree[0], fixed_key_tree, n, num_blocks, j, &prg_output_tree[0]);
-		else
-			prg_leaf_gen(&prgs_leaf[0], fixed_key_leaf, n, num_blocks, j, &prg_output_leaf[0]);
+	// For simple cases						
+	if (stretch == 2) {
+		for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
+		{
+			num_blocks = 2;
+			/*
+			if (!leaf)
+				prg_tree_gen(&prgs_tree[0], fixed_key_tree, n, num_blocks, j, &prg_output_tree[0]);
+			else
+				prg_leaf_gen(&prgs_leaf[0], fixed_key_leaf, n, num_blocks, j, &prg_output_leaf[0]);
+			*/
 
-		if (j + num_blocks < blocks_per_key || bytes_extra_per_key == 0)
-			copy_prg_output(leaf, n, stretch, j, num_blocks, num_blocks * prg_block_size,
-			                prg_output_tree, prg_output_leaf, output);
-		else
-			copy_prg_output(leaf, n, stretch, j, num_blocks,
-			                num_blocks * prg_block_size - bytes_extra_per_key,
-			                prg_output_tree, prg_output_leaf, output);
+			unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
 
+			//XOR and Make RHS
+			
+			/*#pragma omp simd
+			for (size_t k = 0; k < n; ++k){
+				for (size_t l = 0; l < num_blocks * prg_block_size; ++l)
+					tmp[k * num_blocks * prg_block_size + l] = 
+					((unsigned char*) &output[stretch * k])[l] ^ ((unsigned char*) &input[k])[l];
+			}*/
+
+			//#pragma omp simd//parallel for
+			for (size_t k = 0; k < n; ++k) {
+				unsigned char* tmp_ptr = tmp + k * num_blocks * prg_block_size;
+				unsigned char* out_ptr = (unsigned char*)&output[stretch * k];
+				unsigned char* in_ptr  = (unsigned char*)&input[k];
+
+				size_t l = 0;
+				// Process 32 bytes at a time using AVX2
+				for (; l + 32 <= num_blocks * prg_block_size; l += 32) { 
+					// Load 32 bytes from output and input
+					__m256i a = _mm256_loadu_si256((__m256i*)(out_ptr + l));
+					__m256i b = _mm256_loadu_si256((__m256i*)(in_ptr + l));
+
+					// XOR the 32 bytes
+					__m256i res = _mm256_xor_si256(a, b);
+
+					// Store the result in tmp
+					_mm256_storeu_si256((__m256i*)(tmp_ptr + l), res);
+				}
+
+				// Handle any remaining bytes that are less than 32 bytes
+				for (; l < num_blocks * prg_block_size; ++l) {
+					tmp_ptr[l] = out_ptr[l] ^ in_ptr[l];
+				}
+
+				// After XOR, perform memcpy to the appropriate array
+				if (!leaf) {
+					memcpy((void*)&prg_output_tree[num_blocks * k],
+						(unsigned char*) &tmp_ptr[0],
+						num_blocks * prg_block_size);
+				} else {
+					memcpy((void*)&prg_output_leaf[num_blocks * k],
+						(unsigned char*) &tmp_ptr[0],
+						num_blocks * prg_block_size);
+				}
+			}
+
+			/*for (size_t k = 0; k < n; ++k)
+				memcpy(!leaf ? (void*) &prg_output_tree[num_blocks * k]
+							 : (void*) &prg_output_leaf[num_blocks * k],
+							   (unsigned char*) &tmp[num_blocks * prg_block_size * k],
+							   num_blocks * prg_block_size);*/
+
+			if (j + num_blocks < blocks_per_key || bytes_extra_per_key == 0)
+				copy_prg_output(leaf, n, stretch, j, num_blocks, num_blocks * prg_block_size,
+								prg_output_tree, prg_output_leaf, output);
+			else
+				copy_prg_output(leaf, n, stretch, j, num_blocks,
+								num_blocks * prg_block_size - bytes_extra_per_key,
+								prg_output_tree, prg_output_leaf, output);
+
+		}
+	}
+	// need to write commitments					
+	if (stretch == 3) {
+		uint32_t tweak = 0;
+		for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
+		{
+			if (j == 2){
+				tweak = 1;
+			}
+			if (j == 4){
+				tweak = 2;
+			}
+
+			num_blocks = 2;
+
+			if (!leaf)
+				prg_tree_gen(&prgs_tree[0], fixed_key_tree, n, num_blocks, j, &prg_output_tree[0], tweak);
+			else
+				prg_leaf_gen(&prgs_leaf[0], fixed_key_leaf, n, num_blocks, j, &prg_output_leaf[0], tweak);
+
+			if (j + num_blocks < blocks_per_key || bytes_extra_per_key == 0)
+				copy_prg_output(leaf, n, stretch, j, num_blocks, num_blocks * prg_block_size,
+								prg_output_tree, prg_output_leaf, output);
+			else
+				copy_prg_output(leaf, n, stretch, j, num_blocks,
+								num_blocks * prg_block_size - bytes_extra_per_key,
+								prg_output_tree, prg_output_leaf, output);
+
+		}
 	}
 }
 

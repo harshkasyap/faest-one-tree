@@ -17,7 +17,7 @@ extern ALWAYS_INLINE void aes_keygen_ctr(
 
 extern inline void aes_ctr(
 	const aes_round_keys* restrict aeses,
-	size_t num_keys, uint32_t num_blocks, uint32_t counter, block128* restrict output);
+	size_t num_keys, uint32_t num_blocks, uint32_t counter, block128* restrict output, uint32_t tweak);
 
 extern inline void aes_fixed_key_ctr(
 	const aes_round_keys* restrict fixed_key, const block128* restrict keys,

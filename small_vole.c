@@ -121,7 +121,7 @@ static ALWAYS_INLINE void vole(
 
 		for (size_t j = 1; j < COL_LEN; ++j)
 		{
-			prg_vole_gen(prgs, fixed_key, VOLE_WIDTH - 1, PRG_VOLE_BLOCKS, j * PRG_VOLE_BLOCKS, raw_prg_output);
+			prg_vole_gen(prgs, fixed_key, VOLE_WIDTH - 1, PRG_VOLE_BLOCKS, j * PRG_VOLE_BLOCKS, raw_prg_output, 0);
 			process_prg_output(true, j, 0, accum, vq, raw_prg_output);
 		}
 
@@ -148,7 +148,7 @@ static ALWAYS_INLINE void vole(
 
 		for (size_t j = 1; j < COL_LEN; ++j)
 		{
-			prg_vole_gen(prgs, fixed_key, VOLE_WIDTH, PRG_VOLE_BLOCKS, j * PRG_VOLE_BLOCKS, raw_prg_output);
+			prg_vole_gen(prgs, fixed_key, VOLE_WIDTH, PRG_VOLE_BLOCKS, j * PRG_VOLE_BLOCKS, raw_prg_output, 0);
 			process_prg_output(false, j, output_col, accum, vq, raw_prg_output);
 		}
 	}

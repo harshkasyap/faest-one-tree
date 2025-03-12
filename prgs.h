@@ -20,10 +20,10 @@
 	} \
 	static ALWAYS_INLINE void prg_##name##_gen( \
 		const prg_##name##_key* restrict prgs, const prg_##name##_fixed_key* restrict fixed_key, \
-		size_t num_keys, uint32_t num_blocks, uint32_t counter, prg_##name##_block* restrict output) \
+		size_t num_keys, uint32_t num_blocks, uint32_t counter, prg_##name##_block* restrict output, uint32_t tweak) \
 	{ \
 		(void) fixed_key; \
-		aes_ctr(prgs, num_keys, num_blocks, counter, output); \
+		aes_ctr(prgs, num_keys, num_blocks, counter, output, tweak); \
 	}
 
 #define DEFINE_PRG_RIJNDAEL_FIXED_KEY_CTR(name) \

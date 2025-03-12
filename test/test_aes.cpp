@@ -408,7 +408,7 @@ TEST_CASE( "aes ctr", "[aes]" ) {
 
     // test ctr mode
     for (size_t k = 0; k < 2; ++k) {
-        aes_ctr(aeses.data(), num_keys, 3, aes_ctr_counter + 3 * (k + 1), output);
+        aes_ctr(aeses.data(), num_keys, 3, aes_ctr_counter + 3 * (k + 1), output, 0);
         for (size_t i = 0; i < num_keys; ++i) {
             memcpy(&expected_output[i * 16 * 3], &expected_aes_ctr_output[i][(k + 1) * 3], 16 * 3);
         }

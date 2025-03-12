@@ -83,7 +83,7 @@ ALWAYS_INLINE void aes_keygen_ctr(
 // counter. Each key has it's own iv. Outputs from the same key are grouped together in output.
 inline void aes_ctr(
 	const aes_round_keys* restrict aeses,
-	size_t num_keys, uint32_t num_blocks, uint32_t counter, block128* restrict output);
+	size_t num_keys, uint32_t num_blocks, uint32_t counter, block128* restrict output, uint32_t tweak);
 
 // Given num_keys Even-Mansour keys, generate num_blocks block_secpars of output from each in CTR
 // mode, starting at counter.
