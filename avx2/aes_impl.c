@@ -46,6 +46,7 @@ ALWAYS_INLINE void aes_keygen_init(
 	aes_keygen_state* keygen_states, aes_round_keys* aeses,
 	const block_secpar* keys_in, size_t num_keys)
 {
+	printf("nks %zu", num_keys);
 	#ifdef __GNUC__
 	_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH / KEYGEN_WIDTH)))
 	#endif
@@ -60,13 +61,27 @@ ALWAYS_INLINE void aes_keygen_init(
 		#endif
 		for (size_t j = 0; j < chunk_size; ++j)
 		{
+			//memcpy(&keys[j], &keys_in[0], sizeof(block128));
+			//memcpy(&keys[j], &keys_in[j], sizeof(block128));
+			//memcpy(((char*) &keys[j]) + sizeof(block128), ((const char*) &keys_in[j]) + sizeof(block128), sizeof(block128));
+			//memset(((char*) &keys[j]) + sizeof(block128), 0xFF, sizeof(block128));
+
 			keys[j] = keys_in[j];
+			//memcpy(&keys[j], &keys_in[j], 8);
+			//memset(&keys[j] + 8, 0xFF, 8);
+			//memcpy(&keys[j][0], &keys_in[j][0], 8);  // Copy first 8 bytes
+			//memset(&keys[j][8], 0xFF, 8);            // Fill the remaining 8 bytes with 0xFF
+			
+			//memset(&keys[j], 0xFF, sizeof(keys_in[j]));
+			//memset(&keys[j][0], 0xFF, sizeof(block_secpar));
+			//memcpy(&keys[j][0] + sizeof(block_secpar) / 2, &keys_in[j], sizeof(block_secpar) / 2);
 
 			// Copy out the first round keys
 			memcpy(&aeses[j].keys[0], &keys[j], sizeof(block_secpar));
 		}
-		for (size_t j = chunk_size; j < KEYGEN_WIDTH; ++j)
+		for (size_t j = chunk_size; j < KEYGEN_WIDTH; ++j) {
 			keys[j] = block_secpar_set_zero();
+		}
 
 #if SECURITY_PARAM == 128
 		transpose4x4_32(&keygen_states->key_slices[0], &keys[0]);
@@ -192,7 +207,7 @@ ALWAYS_INLINE void aes_keygen_impl(
 {
 	// Upper bound just to avoid VLAs.
 	aes_keygen_state keygen_states[AES_PREFERRED_WIDTH / KEYGEN_WIDTH];
-	aes_keygen_init(keygen_states, aeses, keys, num_keys * num_blocks);
+	aes_keygen_init(keygen_states, aeses, keys, num_keys);
 
 #if SECURITY_PARAM == 128
 	int round_start = 1;
@@ -210,7 +225,7 @@ ALWAYS_INLINE void aes_keygen_impl(
 	// printf("comes here in keygen ctr");
 	// Separate out the first and last rounds, as they work differently.
 
-	block128 sigma_output[3 * AES_PREFERRED_WIDTH];
+	/*block128 sigma_output[3 * AES_PREFERRED_WIDTH];
 
 	for (size_t i = 0; i < num_keys * num_blocks; ++i)
 	{
@@ -219,7 +234,7 @@ ALWAYS_INLINE void aes_keygen_impl(
 
 		block128 sigma_value = sigma(output[i]);  // Compute once
 		sigma_output[i] = output[i] = sigma_value; // Assign both arrays in one step
-	}
+	}*/
 
 	aes_round(aeses, output, num_keys, num_blocks, 0);
 	if (round_start > 1)
@@ -256,10 +271,10 @@ ALWAYS_INLINE void aes_keygen_impl(
 		aes_round(aeses, output, num_keys, num_blocks, round_end + 2);
 	}
 
-	for (size_t i = 0; i < num_keys * num_blocks; ++i)
+	/*for (size_t i = 0; i < num_keys * num_blocks; ++i)
 	{
 		output[i] ^= sigma_output[i];
-	}
+	}*/
 }
 
 // Allow num_keys and num_blocks to be hardcoded by the compiler.

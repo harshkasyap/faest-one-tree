@@ -17,6 +17,45 @@ ALWAYS_INLINE void transpose4x4_32(block128* output, const block128* input)
 	output[3] = _mm_unpackhi_epi64(a2b2a3b3, c2d2c3d3); // output[3] = a3b3c3d3
 }
 
+ALWAYS_INLINE void transpose8x8_32(block128* out, const block128* inp)
+{
+	// Notation: inputs rows are lettered a, b, c, d, while the columns are numbered 0, 1, 2, 3.
+	// E.g., this makes input[0] be a0a1a2a3.
+	__m128i tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
+
+    // Load input values
+    tmp0 = inp[0];
+    tmp1 = inp[1];
+    tmp2 = inp[2];
+    tmp3 = inp[3];
+    tmp4 = inp[4];
+    tmp5 = inp[5];
+    tmp6 = inp[6];
+    tmp7 = inp[7];
+
+    // Step 1: Pairwise interleave 32-bit words
+    __m128i t0 = _mm_unpacklo_epi32(tmp0, tmp1);
+    __m128i t1 = _mm_unpackhi_epi32(tmp0, tmp1);
+    __m128i t2 = _mm_unpacklo_epi32(tmp2, tmp3);
+    __m128i t3 = _mm_unpackhi_epi32(tmp2, tmp3);
+
+    __m128i t4 = _mm_unpacklo_epi32(tmp4, tmp5);
+    __m128i t5 = _mm_unpackhi_epi32(tmp4, tmp5);
+    __m128i t6 = _mm_unpacklo_epi32(tmp6, tmp7);
+    __m128i t7 = _mm_unpackhi_epi32(tmp6, tmp7);
+
+    // Step 2: Interleave the 64-bit values
+    out[0] = _mm_unpacklo_epi64(t0, t2);
+    out[1] = _mm_unpackhi_epi64(t0, t2);
+    out[2] = _mm_unpacklo_epi64(t1, t3);
+    out[3] = _mm_unpackhi_epi64(t1, t3);
+
+    out[4] = _mm_unpacklo_epi64(t4, t6);
+    out[5] = _mm_unpackhi_epi64(t4, t6);
+    out[6] = _mm_unpacklo_epi64(t5, t7);
+    out[7] = _mm_unpackhi_epi64(t5, t7);
+}
+
 // Transpose a 4x2 (row manjor) matrix to get a 2x4 matrix. input0 contains the first two rows,
 // and input1 has the other two rows.
 ALWAYS_INLINE void transpose4x2_32(block128* output, block128 input0, block128 input1)
