@@ -47,17 +47,32 @@ inline block128 sigma(block128 a) {
 ALWAYS_INLINE void aes_round(
 	const aes_round_keys* aeses, block128* state, size_t num_keys, size_t evals_per_key, int round)
 {
-	#ifdef __GNUC__
-	_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH)))
-	#endif
-	for (size_t i = 0; i < num_keys * evals_per_key; ++i) {
-		if (round == 0)
-			state[i] = block128_xor(state[i], aeses[i / evals_per_key].keys[round]);
-		else if (round < AES_ROUNDS)
-			state[i] = _mm_aesenc_si128(state[i], aeses[i / evals_per_key].keys[round]);
-		else
-			state[i] = _mm_aesenclast_si128(state[i], aeses[i / evals_per_key].keys[round]);
-	}	
+	/*if (num_keys > 4 && evals_per_key > 1) {
+		#ifdef __GNUC__
+		_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH)))
+		#endif
+		for (size_t i = 0; i < num_keys * evals_per_key; ++i) {
+			size_t index = i % 2 ? 4 + i/2 : i/2;
+			if (round == 0)
+				state[i] = block128_xor(state[i], aeses[i].keys[round]);
+			else if (round < AES_ROUNDS)
+				state[i] = _mm_aesenc_si128(state[i], aeses[i].keys[round]);
+			else
+				state[i] = _mm_aesenclast_si128(state[i], aeses[i].keys[round]);
+		}
+	} else {*/
+		#ifdef __GNUC__
+		_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH)))
+		#endif
+		for (size_t i = 0; i < num_keys * evals_per_key; ++i) {
+			if (round == 0)
+				state[i] = block128_xor(state[i], aeses[i / evals_per_key].keys[round]);
+			else if (round < AES_ROUNDS)
+				state[i] = _mm_aesenc_si128(state[i], aeses[i / evals_per_key].keys[round]);
+			else
+				state[i] = _mm_aesenclast_si128(state[i], aeses[i / evals_per_key].keys[round]);
+		}	
+	//}
 }
 
 // This implements the rijndael256 RotateRows step, then cancels out the RotateRows of AES so
@@ -125,12 +140,12 @@ ALWAYS_INLINE uint64_t get_iv_counter(const block128* iv)
 {
 	uint64_t counter;
 	memcpy(&counter, ((uint8_t*) iv) + sizeof(*iv) - sizeof(counter), sizeof(counter));
-	return _bswap64(counter);
+	return _blsr_u64(counter);
 }
 
 ALWAYS_INLINE void set_iv_counter(block128* iv, uint64_t counter)
 {
-	counter = _bswap64(counter);
+	counter = _blsr_u64(counter);
 	memcpy(((uint8_t*) iv) + sizeof(*iv) - sizeof(counter), &counter, sizeof(counter));
 }
 
@@ -165,6 +180,8 @@ ALWAYS_INLINE void aes_keygen_ctr(
 	uint64_t counter64 = counter;
 	uint64_t counter_max = counter64 + num_blocks;
 
+	block128 sigma_output[3 * AES_PREFERRED_WIDTH];
+
 	bool bad_iv = false;
 	#ifdef __GNUC__
 	_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
@@ -190,8 +207,13 @@ ALWAYS_INLINE void aes_keygen_ctr(
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
 		for (size_t l = 0; l < num_keys; ++l)
-			for (uint32_t m = 0; m < num_blocks; ++m)
-				output[l * num_blocks + m] = aes_add_counter_to_iv_good(ivs[l], counter64 + m);
+			for (uint32_t m = 0; m < num_blocks; ++m) {
+				uint32_t index = l * num_blocks + m;
+				output[index] = aes_add_counter_to_iv_good(ivs[l], counter64 + m);
+				block128 sigma_value = sigma(output[index]);  // Compute once
+				sigma_output[index] = output[index] = sigma_value; // Assign both arrays in one step
+			}
+
 	}
 
 	// Use a switch to select which function. The case should always be resolved at compile time.
@@ -239,6 +261,11 @@ ALWAYS_INLINE void aes_keygen_ctr(
 	#endif
 	for (size_t l = 0; l < num_keys; ++l)
 		aeses[l].iv = ivs[l];
+
+	for (size_t i = 0; i < num_keys * num_blocks; ++i)
+	{
+		output[i] ^= sigma_output[i];
+	}
 }
 
 inline void aes_ctr(
@@ -250,7 +277,6 @@ inline void aes_ctr(
 	// Upper bound just to avoid VLAs.
 	assert(num_keys * num_blocks <= 3 * AES_PREFERRED_WIDTH);
 	block128 state[3 * AES_PREFERRED_WIDTH];
-	
 	block128 sigma_state[3 * AES_PREFERRED_WIDTH];
 
 	uint64_t counter64 = counter;
@@ -281,23 +307,21 @@ inline void aes_ctr(
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
 		for (size_t l = 0; l < num_keys; ++l)
-			for (uint32_t m = 0; m < num_blocks; ++m)
-				state[l * num_blocks + m] = aes_add_counter_to_iv_good(aeses[l].iv, counter64 + m);
+			for (uint32_t m = 0; m < num_blocks; ++m){
+				uint32_t index = l * num_blocks + m;
+				state[index] = aes_add_counter_to_iv_good(aeses[l].iv, counter64 + m);
+				block128 sigma_value = sigma(state[index]);  // Compute once
+				sigma_value ^= (tweak == 1) ? 1 : (tweak == 2) ? 2 : 0;
+				sigma_state[index] = state[index] = sigma_value; // Assign both arrays in one step
+			}
 	}
 
-	for (size_t i = 0; i < num_keys * num_blocks; ++i)
+	/*for (size_t i = 0; i < num_keys * num_blocks; ++i)
 	{
-		/*sigma_state[i] = sigma(state[i]);
-		sigma_state[i] ^= (tweak == 1) ? 1 : (tweak == 2) ? 2 : 0;
-
-		state[i] = sigma(state[i]);
-		state[i] ^= (tweak == 1) ? 1 : (tweak == 2) ? 2 : 0;*/
-
 		block128 sigma_value = sigma(state[i]);  // Compute once
 		sigma_value ^= (tweak == 1) ? 1 : (tweak == 2) ? 2 : 0;
-
 		sigma_state[i] = state[i] = sigma_value; // Assign both arrays in one step
-	}
+	}*/
 
 	// Make it easier for the compiler to optimize by unwinding the first and last rounds. (Since we
 	// aren't asking it to unwind the whole loop.)

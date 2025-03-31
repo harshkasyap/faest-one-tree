@@ -49,8 +49,8 @@ static ALWAYS_INLINE void expand_chunk(
 	block_secpar keys[MAX_CHUNK_SIZE];
 	prg_tree_iv ivs_tree[TREE_CHUNK_SIZE];
 	prg_leaf_iv ivs_leaf[LEAF_CHUNK_SIZE];
-	prg_tree_key prgs_tree[TREE_CHUNK_SIZE];
-	prg_leaf_key prgs_leaf[LEAF_CHUNK_SIZE];
+	prg_tree_key prgs_tree[TREE_CHUNK_SIZE * 2];
+	prg_leaf_key prgs_leaf[LEAF_CHUNK_SIZE * 2];
 	prg_tree_block prg_output_tree[TREE_CHUNK_SIZE * 3];
 	prg_leaf_block prg_output_leaf[LEAF_CHUNK_SIZE * 3];
 
@@ -87,70 +87,72 @@ static ALWAYS_INLINE void expand_chunk(
 	                prg_output_tree, prg_output_leaf, output);
 
 	// For simple cases						
-	if (stretch == 2) {
+	if (stretch == 5) {
 		for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
 		{
 			num_blocks = 2;
-			/*
-			if (!leaf)
-				prg_tree_gen(&prgs_tree[0], fixed_key_tree, n, num_blocks, j, &prg_output_tree[0]);
+			
+			/*if (!leaf)
+				prg_tree_gen(&prgs_tree[0], fixed_key_tree, n, num_blocks, j, &prg_output_tree[0], 0);
 			else
-				prg_leaf_gen(&prgs_leaf[0], fixed_key_leaf, n, num_blocks, j, &prg_output_leaf[0]);
+				prg_leaf_gen(&prgs_leaf[0], fixed_key_leaf, n, num_blocks, j, &prg_output_leaf[0], 0);
 			*/
 
-			unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
-
 			//XOR and Make RHS
+			unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
 			
-			/*#pragma omp simd
+			#pragma omp simd
 			for (size_t k = 0; k < n; ++k){
 				for (size_t l = 0; l < num_blocks * prg_block_size; ++l)
 					tmp[k * num_blocks * prg_block_size + l] = 
 					((unsigned char*) &output[stretch * k])[l] ^ ((unsigned char*) &input[k])[l];
-			}*/
+			}
 
-			//#pragma omp simd//parallel for
+			#pragma omp simd
+			for (size_t k = 0; k < n; ++k)
+				memcpy(!leaf ? (void*) &prg_output_tree[num_blocks * k]
+							 : (void*) &prg_output_leaf[num_blocks * k],
+							   (unsigned char*) &tmp[num_blocks * prg_block_size * k],
+							   num_blocks * prg_block_size);
+
+			/*unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
+			#pragma omp parallel for simd//parallel for
 			for (size_t k = 0; k < n; ++k) {
 				unsigned char* tmp_ptr = tmp + k * num_blocks * prg_block_size;
+				//unsigned char* tmp_ptr = (unsigned char*) aligned_alloc(32, num_blocks * prg_block_size);
 				unsigned char* out_ptr = (unsigned char*)&output[stretch * k];
 				unsigned char* in_ptr  = (unsigned char*)&input[k];
 
 				size_t l = 0;
+    
 				// Process 32 bytes at a time using AVX2
 				for (; l + 32 <= num_blocks * prg_block_size; l += 32) { 
-					// Load 32 bytes from output and input
-					__m256i a = _mm256_loadu_si256((__m256i*)(out_ptr + l));
-					__m256i b = _mm256_loadu_si256((__m256i*)(in_ptr + l));
-
-					// XOR the 32 bytes
+					__m256i a = _mm256_load_si256((__m256i*)(out_ptr + l));  // Aligned load
+					__m256i b = _mm256_load_si256((__m256i*)(in_ptr + l));   // Aligned load
+			
 					__m256i res = _mm256_xor_si256(a, b);
-
-					// Store the result in tmp
-					_mm256_storeu_si256((__m256i*)(tmp_ptr + l), res);
+					_mm256_store_si256((__m256i*)(tmp_ptr + l), res);  // Store result
 				}
-
-				// Handle any remaining bytes that are less than 32 bytes
+			
+				// Handle remaining bytes (less than 32)
 				for (; l < num_blocks * prg_block_size; ++l) {
 					tmp_ptr[l] = out_ptr[l] ^ in_ptr[l];
 				}
+			
+				// Use pointer aliasing to remove the branch inside the loop
+				unsigned char* target_ptr = (!leaf) ? (void*)&prg_output_tree[num_blocks * k] : (void*)&prg_output_leaf[num_blocks * k];
+			
+				// Perform memcpy to the appropriate array
+				memcpy(target_ptr, tmp_ptr, num_blocks * prg_block_size);
+			}*/
 
-				// After XOR, perform memcpy to the appropriate array
-				if (!leaf) {
-					memcpy((void*)&prg_output_tree[num_blocks * k],
-						(unsigned char*) &tmp_ptr[0],
-						num_blocks * prg_block_size);
-				} else {
-					memcpy((void*)&prg_output_leaf[num_blocks * k],
-						(unsigned char*) &tmp_ptr[0],
-						num_blocks * prg_block_size);
-				}
-			}
-
-			/*for (size_t k = 0; k < n; ++k)
-				memcpy(!leaf ? (void*) &prg_output_tree[num_blocks * k]
-							 : (void*) &prg_output_leaf[num_blocks * k],
-							   (unsigned char*) &tmp[num_blocks * prg_block_size * k],
-							   num_blocks * prg_block_size);*/
+			/*for (size_t k = 0; k < n; ++k) {
+				// Use pointer aliasing to remove the branch inside the loop
+				unsigned char* target_ptr = (!leaf) ? (void*)&prg_output_tree[num_blocks * k] : (void*)&prg_output_leaf[num_blocks * k];
+				
+				// Perform memcpy to the appropriate array
+				memcpy(target_ptr, input[k] ^ output[stretch * k], num_blocks * prg_block_size);
+			}*/
 
 			if (j + num_blocks < blocks_per_key || bytes_extra_per_key == 0)
 				copy_prg_output(leaf, n, stretch, j, num_blocks, num_blocks * prg_block_size,
@@ -161,18 +163,11 @@ static ALWAYS_INLINE void expand_chunk(
 								prg_output_tree, prg_output_leaf, output);
 
 		}
-	}
-	// need to write commitments					
-	if (stretch == 3) {
+	} else {
 		uint32_t tweak = 0;
 		for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
 		{
-			if (j == 2){
-				tweak = 1;
-			}
-			if (j == 4){
-				tweak = 2;
-			}
+			tweak = (j == 2) ? 1 : (j == 4) ? 2 : tweak;
 
 			num_blocks = 2;
 
@@ -786,7 +781,7 @@ bool force_vector_open(const block_secpar* restrict forest, const block_2secpar*
 		{
 			const uint8_t* delta = &outputs[j * SECURITY_PARAM / 8];
 
-			static_assert(ZERO_BITS_IN_CHALLENGE_3 <= 64);
+			static_assert(ZERO_BITS_IN_CHALLENGE_3 <= 64, "Constraint violated");
 #if ZERO_BITS_IN_CHALLENGE_3 > 0
 			// Will be optimized into a single mov.
 			uint64_t last_bits = 0;

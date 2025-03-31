@@ -108,7 +108,8 @@ inline poly192_vec poly192_load(const void* s)
 
 #if POLY_VEC_LEN == 1
 	memcpy(&out.data[0], s, sizeof(block128));
-	out.data[1] = _mm_loadu_si64(((char*) s) + sizeof(block128));
+	//out.data[1] = _mm_loadl_epi64(((char*) s) + sizeof(block128));
+	out.data[1] = _mm_loadl_epi64((const __m128i*)((const int64_t*) s + 1));
 
 #elif POLY_VEC_LEN == 2
 	block256 a0a1a2b0;
@@ -214,7 +215,8 @@ inline poly192_vec poly192_load_dup(const void* s)
 	block128 in[2];
 
 	memcpy(&in[0], s, sizeof(block128));
-	in[1] = _mm_loadu_si64(((char*) s) + sizeof(block128));
+	//in[1] = _mm_loadl_epi64(((char*) s) + sizeof(block128));
+	in[1] = _mm_loadl_epi64((const __m128i*)((const int64_t*) s + 1));
 
 	poly192_vec out;
 #if POLY_VEC_LEN == 1
