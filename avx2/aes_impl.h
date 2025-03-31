@@ -115,12 +115,12 @@ ALWAYS_INLINE uint64_t get_iv_counter(const block128* iv)
 {
 	uint64_t counter;
 	memcpy(&counter, ((uint8_t*) iv) + sizeof(*iv) - sizeof(counter), sizeof(counter));
-	return _bswap64(counter);
+	return _blsr_u64(counter);
 }
 
 ALWAYS_INLINE void set_iv_counter(block128* iv, uint64_t counter)
 {
-	counter = _bswap64(counter);
+	counter = _blsr_u64(counter);
 	memcpy(((uint8_t*) iv) + sizeof(*iv) - sizeof(counter), &counter, sizeof(counter));
 }
 

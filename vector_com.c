@@ -691,7 +691,7 @@ bool force_vector_open(const block_secpar* restrict forest, const block_2secpar*
 		{
 			const uint8_t* delta = &outputs[j * SECURITY_PARAM / 8];
 
-			static_assert(ZERO_BITS_IN_CHALLENGE_3 <= 64);
+			static_assert(ZERO_BITS_IN_CHALLENGE_3 <= 64, "Constraint violated");
 #if ZERO_BITS_IN_CHALLENGE_3 > 0
 			// Will be optimized into a single mov.
 			uint64_t last_bits = 0;
