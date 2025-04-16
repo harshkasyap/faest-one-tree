@@ -99,7 +99,7 @@ static ALWAYS_INLINE void expand_chunk(
 			*/
 
 			//XOR and Make RHS
-			unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
+			/*unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
 			
 			#pragma omp simd
 			for (size_t k = 0; k < n; ++k){
@@ -113,9 +113,9 @@ static ALWAYS_INLINE void expand_chunk(
 				memcpy(!leaf ? (void*) &prg_output_tree[num_blocks * k]
 							 : (void*) &prg_output_leaf[num_blocks * k],
 							   (unsigned char*) &tmp[num_blocks * prg_block_size * k],
-							   num_blocks * prg_block_size);
+							   num_blocks * prg_block_size);*/
 
-			/*unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
+			unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
 			#pragma omp parallel for simd//parallel for
 			for (size_t k = 0; k < n; ++k) {
 				unsigned char* tmp_ptr = tmp + k * num_blocks * prg_block_size;
@@ -144,7 +144,7 @@ static ALWAYS_INLINE void expand_chunk(
 			
 				// Perform memcpy to the appropriate array
 				memcpy(target_ptr, tmp_ptr, num_blocks * prg_block_size);
-			}*/
+			}
 
 			/*for (size_t k = 0; k < n; ++k) {
 				// Use pointer aliasing to remove the branch inside the loop
@@ -781,7 +781,7 @@ bool force_vector_open(const block_secpar* restrict forest, const block_2secpar*
 		{
 			const uint8_t* delta = &outputs[j * SECURITY_PARAM / 8];
 
-			static_assert(ZERO_BITS_IN_CHALLENGE_3 <= 64, "Constraint violated");
+			static_assert(ZERO_BITS_IN_CHALLENGE_3 <= 64);
 #if ZERO_BITS_IN_CHALLENGE_3 > 0
 			// Will be optimized into a single mov.
 			uint64_t last_bits = 0;

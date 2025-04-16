@@ -47,7 +47,7 @@ inline block128 sigma(block128 a) {
 ALWAYS_INLINE void aes_round(
 	const aes_round_keys* aeses, block128* state, size_t num_keys, size_t evals_per_key, int round)
 {
-	/*if (num_keys > 4 && evals_per_key > 1) {
+	if (num_keys > 4 && evals_per_key > 1) {
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH)))
 		#endif
@@ -60,7 +60,7 @@ ALWAYS_INLINE void aes_round(
 			else
 				state[i] = _mm_aesenclast_si128(state[i], aeses[i].keys[round]);
 		}
-	} else {*/
+	} else {
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH)))
 		#endif
@@ -72,7 +72,7 @@ ALWAYS_INLINE void aes_round(
 			else
 				state[i] = _mm_aesenclast_si128(state[i], aeses[i / evals_per_key].keys[round]);
 		}	
-	//}
+	}
 }
 
 // This implements the rijndael256 RotateRows step, then cancels out the RotateRows of AES so
@@ -140,12 +140,12 @@ ALWAYS_INLINE uint64_t get_iv_counter(const block128* iv)
 {
 	uint64_t counter;
 	memcpy(&counter, ((uint8_t*) iv) + sizeof(*iv) - sizeof(counter), sizeof(counter));
-	return _blsr_u64(counter);
+	return _bswap64(counter);
 }
 
 ALWAYS_INLINE void set_iv_counter(block128* iv, uint64_t counter)
 {
-	counter = _blsr_u64(counter);
+	counter = _bswap64(counter);
 	memcpy(((uint8_t*) iv) + sizeof(*iv) - sizeof(counter), &counter, sizeof(counter));
 }
 

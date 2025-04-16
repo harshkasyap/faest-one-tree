@@ -46,11 +46,11 @@ ALWAYS_INLINE void aes_keygen_init(
 	aes_keygen_state* keygen_states, aes_round_keys* aeses,
 	const block_secpar* keys_in, size_t num_keys, size_t num_blocks)
 {
-	//printf("nks %zu", num_keys);
+	//printf("nks %zu %zu ", num_keys, num_blocks);
 
-	/*if (num_blocks > 1) {
-		num_keys = num_keys * num_blocks;
-	}*/
+	if (num_blocks > 1) {
+		num_keys = num_keys * 2;
+	}
 
 	#ifdef __GNUC__
 	_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH / KEYGEN_WIDTH)))
@@ -212,6 +212,8 @@ ALWAYS_INLINE void aes_keygen_impl(
 {
 	// Upper bound just to avoid VLAs.
 	//printf("keys blocks %zu %zu", num_keys, num_blocks);
+
+	//printf("AES_PREFERRED_WIDTH %zu %zu", AES_PREFERRED_WIDTH, KEYGEN_WIDTH);
 	aes_keygen_state keygen_states[AES_PREFERRED_WIDTH / KEYGEN_WIDTH];
 	aes_keygen_init(keygen_states, aeses, keys, num_keys, num_blocks);
 
