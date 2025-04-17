@@ -62,19 +62,13 @@ static ALWAYS_INLINE void expand_chunk(
 		memcpy(&ivs_leaf[i], &iv, sizeof(ivs_leaf[i]));
 	}
 
-	//printf("tree block size leaf block size %zu %zu", sizeof(prg_tree_block), sizeof(prg_leaf_block));
-
 	size_t prg_block_size = !leaf ? sizeof(prg_tree_block) : sizeof(prg_leaf_block);
-	
-	//printf("stretch, block_secpar, prg_block_size %zu %zu %zu", stretch, sizeof(block_secpar), prg_block_size);
 	uint32_t blocks_per_key = (stretch * sizeof(block_secpar) + prg_block_size - 1) / prg_block_size;
 	//printf("blocks_per_key %zu", blocks_per_key);
 	size_t bytes_extra_per_key = blocks_per_key * prg_block_size - stretch * sizeof(block_secpar);
 
 	assert(blocks_per_key >= 2);
 	uint32_t num_blocks = blocks_per_key % 2 ? 3 : 2;
-	// printf("no of keys, blocks per key, Num of blocks %zu %zu %zu", n, blocks_per_key, num_blocks);
-
 	if (!leaf)
 		prg_tree_init(&prgs_tree[0], fixed_key_tree, &keys[0], &ivs_tree[0],
 		              n, num_blocks, 0, &prg_output_tree[0]);
@@ -87,33 +81,10 @@ static ALWAYS_INLINE void expand_chunk(
 	                prg_output_tree, prg_output_leaf, output);
 
 	// For simple cases						
-	if (stretch == 5) {
+	if (stretch == 2) {
 		for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
 		{
 			num_blocks = 2;
-			
-			/*if (!leaf)
-				prg_tree_gen(&prgs_tree[0], fixed_key_tree, n, num_blocks, j, &prg_output_tree[0], 0);
-			else
-				prg_leaf_gen(&prgs_leaf[0], fixed_key_leaf, n, num_blocks, j, &prg_output_leaf[0], 0);
-			*/
-
-			//XOR and Make RHS
-			/*unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
-			
-			#pragma omp simd
-			for (size_t k = 0; k < n; ++k){
-				for (size_t l = 0; l < num_blocks * prg_block_size; ++l)
-					tmp[k * num_blocks * prg_block_size + l] = 
-					((unsigned char*) &output[stretch * k])[l] ^ ((unsigned char*) &input[k])[l];
-			}
-
-			#pragma omp simd
-			for (size_t k = 0; k < n; ++k)
-				memcpy(!leaf ? (void*) &prg_output_tree[num_blocks * k]
-							 : (void*) &prg_output_leaf[num_blocks * k],
-							   (unsigned char*) &tmp[num_blocks * prg_block_size * k],
-							   num_blocks * prg_block_size);*/
 
 			unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
 			#pragma omp parallel for simd//parallel for
@@ -145,14 +116,6 @@ static ALWAYS_INLINE void expand_chunk(
 				// Perform memcpy to the appropriate array
 				memcpy(target_ptr, tmp_ptr, num_blocks * prg_block_size);
 			}
-
-			/*for (size_t k = 0; k < n; ++k) {
-				// Use pointer aliasing to remove the branch inside the loop
-				unsigned char* target_ptr = (!leaf) ? (void*)&prg_output_tree[num_blocks * k] : (void*)&prg_output_leaf[num_blocks * k];
-				
-				// Perform memcpy to the appropriate array
-				memcpy(target_ptr, input[k] ^ output[stretch * k], num_blocks * prg_block_size);
-			}*/
 
 			if (j + num_blocks < blocks_per_key || bytes_extra_per_key == 0)
 				copy_prg_output(leaf, n, stretch, j, num_blocks, num_blocks * prg_block_size,

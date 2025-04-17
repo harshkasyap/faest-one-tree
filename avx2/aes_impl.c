@@ -46,7 +46,6 @@ ALWAYS_INLINE void aes_keygen_init(
 	aes_keygen_state* keygen_states, aes_round_keys* aeses,
 	const block_secpar* keys_in, size_t num_keys, size_t num_blocks)
 {
-	//printf("nks %zu %zu ", num_keys, num_blocks);
 
 	if (num_blocks > 1) {
 		num_keys = num_keys * 2;
@@ -66,27 +65,13 @@ ALWAYS_INLINE void aes_keygen_init(
 		#endif
 		for (size_t j = 0; j < chunk_size; ++j)
 		{
-			//memcpy(&keys[j], &keys_in[0], sizeof(block128));
-			//memcpy(&keys[j], &keys_in[j], sizeof(block128));
-			//memcpy(((char*) &keys[j]) + sizeof(block128), ((const char*) &keys_in[j]) + sizeof(block128), sizeof(block128));
-			//memset(((char*) &keys[j]) + sizeof(block128), 0xFF, sizeof(block128));
-			
 			keys[j] = keys_in[j];
-			//memcpy(&keys[j], &keys_in[j], 8);
-			//memset(&keys[j] + 8, 0xFF, 8);
-			//memcpy(&keys[j][0], &keys_in[j][0], 8);  // Copy first 8 bytes
-			//memset(&keys[j][8], 0xFF, 8);            // Fill the remaining 8 bytes with 0xFF
-			
-			//memset(&keys[j], 0xFF, sizeof(keys_in[j]));
-			//memset(&keys[j][0], 0xFF, sizeof(block_secpar));
-			//memcpy(&keys[j][0] + sizeof(block_secpar) / 2, &keys_in[j], sizeof(block_secpar) / 2);
 
 			// Copy out the first round keys
 			memcpy(&aeses[j].keys[0], &keys[j], sizeof(block_secpar));
 		}
-		for (size_t j = chunk_size; j < KEYGEN_WIDTH; ++j) {
+		for (size_t j = chunk_size; j < KEYGEN_WIDTH; ++j)
 			keys[j] = block_secpar_set_zero();
-		}
 
 #if SECURITY_PARAM == 128
 		transpose4x4_32(&keygen_states->key_slices[0], &keys[0]);
@@ -211,9 +196,6 @@ ALWAYS_INLINE void aes_keygen_impl(
 	size_t num_keys, uint32_t num_blocks, block128* output)
 {
 	// Upper bound just to avoid VLAs.
-	//printf("keys blocks %zu %zu", num_keys, num_blocks);
-
-	//printf("AES_PREFERRED_WIDTH %zu %zu", AES_PREFERRED_WIDTH, KEYGEN_WIDTH);
 	aes_keygen_state keygen_states[AES_PREFERRED_WIDTH / KEYGEN_WIDTH];
 	aes_keygen_init(keygen_states, aeses, keys, num_keys, num_blocks);
 
@@ -230,7 +212,7 @@ ALWAYS_INLINE void aes_keygen_impl(
 	int round_end = AES_ROUNDS - 2;
 	int unroll_rounds = 2;
 #endif
-	// printf("comes here in keygen ctr");
+
 	// Separate out the first and last rounds, as they work differently.
 
 	/*block128 sigma_output[3 * AES_PREFERRED_WIDTH];

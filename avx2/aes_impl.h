@@ -191,8 +191,7 @@ ALWAYS_INLINE void aes_keygen_ctr(
 			bad_iv = true;
 
 	if (bad_iv)
-	{   
-		//printf("does not come here");
+	{
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
@@ -202,7 +201,6 @@ ALWAYS_INLINE void aes_keygen_ctr(
 	}
 	else
 	{
-		//printf("it comes here");
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
@@ -272,8 +270,6 @@ inline void aes_ctr(
 	const aes_round_keys* restrict aeses,
 	size_t num_keys, uint32_t num_blocks, uint32_t counter, block128* restrict output, uint32_t tweak)
 {
-
-	// printf("Num of blocks %zu", num_blocks);
 	// Upper bound just to avoid VLAs.
 	assert(num_keys * num_blocks <= 3 * AES_PREFERRED_WIDTH);
 	block128 state[3 * AES_PREFERRED_WIDTH];
@@ -292,7 +288,6 @@ inline void aes_ctr(
 
 	if (bad_iv)
 	{
-		//printf("does not come here");
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
@@ -302,7 +297,6 @@ inline void aes_ctr(
 	}
 	else
 	{
-		//printf("it comes here");
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (3*AES_PREFERRED_WIDTH)))
 		#endif
