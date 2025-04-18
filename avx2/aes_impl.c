@@ -47,17 +47,18 @@ ALWAYS_INLINE void aes_keygen_init(
 	const block_secpar* keys_in, size_t num_keys, size_t num_blocks)
 {
 
-	if (num_blocks > 1) {
-		num_keys = num_keys * 2;
+	size_t t_num_keys = num_keys;
+	if (t_num_keys == 4 && num_blocks > 1) {
+		t_num_keys = t_num_keys * num_blocks;
 	}
 
 	#ifdef __GNUC__
 	_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH / KEYGEN_WIDTH)))
 	#endif
-	for (size_t i = 0; i < num_keys;
-	     i += KEYGEN_WIDTH, keys_in += KEYGEN_WIDTH, aeses += KEYGEN_WIDTH, ++keygen_states)
+	for (size_t i = 0; i < t_num_keys;
+	     i += KEYGEN_WIDTH, aeses += KEYGEN_WIDTH, ++keygen_states)
 	{
-		size_t chunk_size = num_keys - i < KEYGEN_WIDTH ? num_keys - i : KEYGEN_WIDTH;
+		size_t chunk_size = t_num_keys - i < KEYGEN_WIDTH ? t_num_keys - i : KEYGEN_WIDTH;
 		block_secpar keys[KEYGEN_WIDTH];
 
 		#ifdef __GNUC__
@@ -115,20 +116,28 @@ ALWAYS_INLINE void aes_keygen_init(
 			cumulative_xor(&keygen_states->key_slices[0], 4);
 			cumulative_xor(&keygen_states->key_slices[4], 4);
 		}
+
+		if (num_keys > 4)
+			keys_in += KEYGEN_WIDTH;
 	}
 }
 
 ALWAYS_INLINE void aes_keygen_round(
-	aes_keygen_state* keygen_states, aes_round_keys* aeses, size_t num_keys, int round)
+	aes_keygen_state* keygen_states, aes_round_keys* aeses, size_t num_keys, size_t num_blocks, int round)
 {
+	size_t t_num_keys = num_keys;
+	if (t_num_keys == 4 && num_blocks > 1) {
+		t_num_keys = t_num_keys * num_blocks;
+	}
+
 	if (round < SECURITY_PARAM / 128) return;
 
 	#ifdef __GNUC__
 	_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH / KEYGEN_WIDTH)))
 	#endif
-	for (size_t i = 0; i < num_keys; i += KEYGEN_WIDTH, aeses += KEYGEN_WIDTH, ++keygen_states)
+	for (size_t i = 0; i < t_num_keys; i += KEYGEN_WIDTH, aeses += KEYGEN_WIDTH, ++keygen_states)
 	{
-		size_t chunk_size = num_keys - i < KEYGEN_WIDTH ? num_keys - i : KEYGEN_WIDTH;
+		size_t chunk_size = t_num_keys - i < KEYGEN_WIDTH ? t_num_keys - i : KEYGEN_WIDTH;
 
 		if (SECURITY_PARAM != 192 || round % 3 < 2)
 		{
@@ -196,7 +205,7 @@ ALWAYS_INLINE void aes_keygen_impl(
 	size_t num_keys, uint32_t num_blocks, block128* output)
 {
 	// Upper bound just to avoid VLAs.
-	aes_keygen_state keygen_states[AES_PREFERRED_WIDTH / KEYGEN_WIDTH];
+	aes_keygen_state keygen_states[3];//AES_PREFERRED_WIDTH / KEYGEN_WIDTH];
 	aes_keygen_init(keygen_states, aeses, keys, num_keys, num_blocks);
 
 #if SECURITY_PARAM == 128
@@ -235,29 +244,29 @@ ALWAYS_INLINE void aes_keygen_impl(
 		// Unroll the loop, as the key generation follows a pattern that repeats every unroll_rounds
 		// iterations.
 
-		aes_keygen_round(keygen_states, aeses, num_keys, round);
+		aes_keygen_round(keygen_states, aeses, num_keys, num_blocks, round);
 		aes_round(aeses, output, num_keys, num_blocks, round);
 		if (unroll_rounds > 1)
 		{
 			if (round_end < round + 1)
 				break;
-			aes_keygen_round(keygen_states, aeses, num_keys, round + 1);
+			aes_keygen_round(keygen_states, aeses, num_keys, num_blocks, round + 1);
 			aes_round(aeses, output, num_keys, num_blocks, round + 1);
 		}
 		if (unroll_rounds > 2)
 		{
 			if (round_end < round + 2)
 				break;
-			aes_keygen_round(keygen_states, aeses, num_keys, round + 2);
+			aes_keygen_round(keygen_states, aeses, num_keys, num_blocks, round + 2);
 			aes_round(aeses, output, num_keys, num_blocks, round + 2);
 		}
 	}
 
-	aes_keygen_round(keygen_states, aeses, num_keys, round_end + 1);
+	aes_keygen_round(keygen_states, aeses, num_keys, num_blocks, round_end + 1);
 	aes_round(aeses, output, num_keys, num_blocks, round_end + 1);
 	if (round_end + 2 <= AES_ROUNDS)
 	{
-		aes_keygen_round(keygen_states, aeses, num_keys, round_end + 2);
+		aes_keygen_round(keygen_states, aeses, num_keys, num_blocks, round_end + 2);
 		aes_round(aeses, output, num_keys, num_blocks, round_end + 2);
 	}
 

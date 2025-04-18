@@ -49,8 +49,8 @@ static ALWAYS_INLINE void expand_chunk(
 	block_secpar keys[MAX_CHUNK_SIZE];
 	prg_tree_iv ivs_tree[TREE_CHUNK_SIZE];
 	prg_leaf_iv ivs_leaf[LEAF_CHUNK_SIZE];
-	prg_tree_key prgs_tree[TREE_CHUNK_SIZE * 2];
-	prg_leaf_key prgs_leaf[LEAF_CHUNK_SIZE * 2];
+	prg_tree_key prgs_tree[TREE_CHUNK_SIZE * 3];
+	prg_leaf_key prgs_leaf[LEAF_CHUNK_SIZE * 3];
 	prg_tree_block prg_output_tree[TREE_CHUNK_SIZE * 3];
 	prg_leaf_block prg_output_leaf[LEAF_CHUNK_SIZE * 3];
 
@@ -80,7 +80,7 @@ static ALWAYS_INLINE void expand_chunk(
 	copy_prg_output(leaf, n, stretch, 0, num_blocks, num_blocks * prg_block_size,
 	                prg_output_tree, prg_output_leaf, output);
 
-	// For simple cases						
+	// For gen tree						
 	if (stretch == 2) {
 		for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
 		{
@@ -130,7 +130,7 @@ static ALWAYS_INLINE void expand_chunk(
 		uint32_t tweak = 0;
 		for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
 		{
-			tweak = (j == 2) ? 1 : (j == 4) ? 2 : tweak;
+			tweak = (j == num_blocks) ? 1 : 2;
 
 			num_blocks = 2;
 
