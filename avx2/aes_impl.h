@@ -43,22 +43,44 @@ inline block128 sigma(block128 a) {
 	return _mm_shuffle_epi32(a, 78) ^ (a & makeBlock(0xFFFFFFFFFFFFFFFF, 0x00));
 }
 
-
-ALWAYS_INLINE void aes_round(
-	const aes_round_keys* aeses, block128* state, size_t num_keys, size_t evals_per_key, int round)
+ALWAYS_INLINE void aes_round_xor(
+	const aes_round_keys* aeses, block128* state, block128* sigma_state, size_t num_keys, size_t evals_per_key, int round)
 {
-	if (num_keys > 4 && evals_per_key > 1) {
+	if (num_keys == 4 && evals_per_key > 1) {
 		#ifdef __GNUC__
 		_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH)))
 		#endif
 		for (size_t i = 0; i < num_keys * evals_per_key; ++i) {
-			size_t index = i % 2 ? 4 + i/2 : i/2;
+			size_t index = i % evals_per_key ? 4 * (i % evals_per_key) + i/evals_per_key : i/evals_per_key;
+			state[i] = _mm_aesenclast_si128(state[i], aeses[index].keys[round]);
+			state[i] = _mm_xor_si128(state[i], sigma_state[i]);
+		}
+	} else {
+		#ifdef __GNUC__
+		_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH)))
+		#endif
+		for (size_t i = 0; i < num_keys * evals_per_key; ++i) {
+			state[i] = _mm_aesenclast_si128(state[i], aeses[i / evals_per_key].keys[round]);
+			state[i] = _mm_xor_si128(state[i], sigma_state[i]);
+		}	
+	}
+}
+
+ALWAYS_INLINE void aes_round(
+	const aes_round_keys* aeses, block128* state, size_t num_keys, size_t evals_per_key, int round)
+{
+	if (num_keys == 4 && evals_per_key > 1) {
+		#ifdef __GNUC__
+		_Pragma(STRINGIZE(GCC unroll (2*AES_PREFERRED_WIDTH)))
+		#endif
+		for (size_t i = 0; i < num_keys * evals_per_key; ++i) {
+			size_t index = i % evals_per_key ? 4 * (i % evals_per_key) + i/evals_per_key : i/evals_per_key;
 			if (round == 0)
-				state[i] = block128_xor(state[i], aeses[i].keys[round]);
+				state[i] = block128_xor(state[i], aeses[index].keys[round]);
 			else if (round < AES_ROUNDS)
-				state[i] = _mm_aesenc_si128(state[i], aeses[i].keys[round]);
+				state[i] = _mm_aesenc_si128(state[i], aeses[index].keys[round]);
 			else
-				state[i] = _mm_aesenclast_si128(state[i], aeses[i].keys[round]);
+				state[i] = _mm_aesenclast_si128(state[i], aeses[index].keys[round]);
 		}
 	} else {
 		#ifdef __GNUC__
@@ -257,13 +279,20 @@ ALWAYS_INLINE void aes_keygen_ctr(
 	#ifdef __GNUC__
 	_Pragma(STRINGIZE(GCC unroll (3 * AES_PREFERRED_WIDTH)))
 	#endif
-	for (size_t l = 0; l < num_keys; ++l)
+	for (size_t l = 0; l < num_keys; ++l) {
 		aeses[l].iv = ivs[l];
-
-	for (size_t i = 0; i < num_keys * num_blocks; ++i)
-	{
-		output[i] ^= sigma_output[i];
+		for (size_t m = 0; m < num_blocks; ++m) {
+			uint32_t index = l * num_blocks + m;
+			output[index] = _mm_xor_si128(output[index], sigma_output[index]);
+		}
 	}
+
+	/*for (size_t i = 0; i < num_keys * num_blocks; ++i)
+	{
+		//output[i] ^= sigma_output[i];
+		output[i] = _mm_xor_si128(output[i], sigma_output[i]);
+		//_mm_xor_si128(
+	}*/
 }
 
 inline void aes_ctr(
@@ -304,8 +333,10 @@ inline void aes_ctr(
 			for (uint32_t m = 0; m < num_blocks; ++m){
 				uint32_t index = l * num_blocks + m;
 				state[index] = aes_add_counter_to_iv_good(aeses[l].iv, counter64 + m);
-				block128 sigma_value = sigma(state[index]);  // Compute once
-				sigma_value ^= (tweak == 1) ? 1 : (tweak == 2) ? 2 : 0;
+				block128 sigma_value = sigma(state[index]);  // Compute once 
+				//sigma_value ^= (tweak == 1) ? 1 : (tweak == 2) ? 2 : 0;
+				if (tweak)
+					sigma_value = _mm_xor_si128(sigma_value, _mm_set1_epi8(tweak));
 				sigma_state[index] = state[index] = sigma_value; // Assign both arrays in one step
 			}
 	}
@@ -322,12 +353,12 @@ inline void aes_ctr(
 	aes_round(aeses, state, num_keys, num_blocks, 0);
 	for (int round = 1; round < AES_ROUNDS; ++round)
 		aes_round(aeses, state, num_keys, num_blocks, round);
-	aes_round(aeses, state, num_keys, num_blocks, AES_ROUNDS);
+	//aes_round(aeses, state, num_keys, num_blocks, AES_ROUNDS);
+	aes_round_xor(aeses, state, sigma_state, num_keys, num_blocks, AES_ROUNDS);
 
-	for (size_t i = 0; i < num_keys * num_blocks; ++i)
-	{
-		state[i] ^= sigma_state[i];
-	}
+	/*for (size_t i = 0; i < num_keys * num_blocks; ++i)
+		state[i] = _mm_xor_si128(state[i], sigma_state[i]);*/
+		//state[i] ^= sigma_state[i];
 
 	memcpy(output, state, num_keys * num_blocks * sizeof(block128));
 }

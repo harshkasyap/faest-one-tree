@@ -49,8 +49,8 @@ static ALWAYS_INLINE void expand_chunk(
 	block_secpar keys[MAX_CHUNK_SIZE];
 	prg_tree_iv ivs_tree[TREE_CHUNK_SIZE];
 	prg_leaf_iv ivs_leaf[LEAF_CHUNK_SIZE];
-	prg_tree_key prgs_tree[TREE_CHUNK_SIZE * 2];
-	prg_leaf_key prgs_leaf[LEAF_CHUNK_SIZE * 2];
+	prg_tree_key prgs_tree[TREE_CHUNK_SIZE * 3];
+	prg_leaf_key prgs_leaf[LEAF_CHUNK_SIZE * 3];
 	prg_tree_block prg_output_tree[TREE_CHUNK_SIZE * 3];
 	prg_leaf_block prg_output_leaf[LEAF_CHUNK_SIZE * 3];
 
@@ -65,10 +65,15 @@ static ALWAYS_INLINE void expand_chunk(
 	size_t prg_block_size = !leaf ? sizeof(prg_tree_block) : sizeof(prg_leaf_block);
 	uint32_t blocks_per_key = (stretch * sizeof(block_secpar) + prg_block_size - 1) / prg_block_size;
 	//printf("blocks_per_key %zu", blocks_per_key);
+
 	size_t bytes_extra_per_key = blocks_per_key * prg_block_size - stretch * sizeof(block_secpar);
 
 	assert(blocks_per_key >= 2);
-	uint32_t num_blocks = blocks_per_key % 2 ? 3 : 2;
+	
+	uint32_t num_blocks = 1;
+	if (SECURITY_PARAM == 256)
+		num_blocks = 2;
+
 	if (!leaf)
 		prg_tree_init(&prgs_tree[0], fixed_key_tree, &keys[0], &ivs_tree[0],
 		              n, num_blocks, 0, &prg_output_tree[0]);
@@ -80,11 +85,11 @@ static ALWAYS_INLINE void expand_chunk(
 	copy_prg_output(leaf, n, stretch, 0, num_blocks, num_blocks * prg_block_size,
 	                prg_output_tree, prg_output_leaf, output);
 
-	// For simple cases						
-	if (stretch == 2) {
+	// For gen tree						
+	if (stretch == 5) {
 		for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
 		{
-			num_blocks = 2;
+			//num_blocks = 2;
 
 			unsigned char* tmp =(unsigned char*) aligned_alloc(32, n * num_blocks * prg_block_size);
 			#pragma omp parallel for simd//parallel for
@@ -95,7 +100,7 @@ static ALWAYS_INLINE void expand_chunk(
 				unsigned char* in_ptr  = (unsigned char*)&input[k];
 
 				size_t l = 0;
-    
+
 				// Process 32 bytes at a time using AVX2
 				for (; l + 32 <= num_blocks * prg_block_size; l += 32) { 
 					__m256i a = _mm256_load_si256((__m256i*)(out_ptr + l));  // Aligned load
@@ -130,9 +135,9 @@ static ALWAYS_INLINE void expand_chunk(
 		uint32_t tweak = 0;
 		for (uint32_t j = num_blocks; j < blocks_per_key; j += num_blocks)
 		{
-			tweak = (j == 2) ? 1 : (j == 4) ? 2 : tweak;
+			tweak = (j == num_blocks) ? 1 : 2;
 
-			num_blocks = 2;
+			//num_blocks = 2;
 
 			if (!leaf)
 				prg_tree_gen(&prgs_tree[0], fixed_key_tree, n, num_blocks, j, &prg_output_tree[0], tweak);

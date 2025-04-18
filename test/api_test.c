@@ -48,7 +48,13 @@ int main(void) {
   unsigned char omessage[sizeof(message)]          = {0};
   unsigned char sm[sizeof(message) + CRYPTO_BYTES] = {0};
 
+
+  uint64_t kg_cycle = rdtsc();
+  clock_t kg_time = clock();
   int ret = crypto_sign_keypair(pk, sk);
+  printf("Time taken to keygen: %f seconds\n",(double)(clock() - kg_time) / CLOCKS_PER_SEC);
+  printf("keygen cpu cycles: %ld\n", rdtsc() - kg_cycle);
+
   if (ret != 0) {
     printf("Failed to generate key pair\n");
     return -1;
